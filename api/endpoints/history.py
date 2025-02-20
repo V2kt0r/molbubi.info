@@ -7,7 +7,7 @@ from ..schemas import HistoryResponse
 router = APIRouter(prefix="/history", tags=["History"])
 
 
-@router.get("", response_model=HistoryResponse)
+@router.get("/{bike_number}", response_model=HistoryResponse)
 def get_bike_history(bike_number: str, bike_service: BikeServiceDep) -> HistoryResponse:
     response = bike_service.get_bike_history(bike_number)
 
