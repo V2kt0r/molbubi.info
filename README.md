@@ -1,4 +1,27 @@
-# Bike Tracking System Deployment Guide
+# Bike Tracking System 🚴
+
+## Introduction
+
+### Why This Project?
+This project tracks bike movements and calculates travel distances using real-world GPS data from a public API. I chose this challenge because:
+
+- 🌆 It offers fascinating insights into urban mobility patterns
+- 🚲 I've always wanted to analyze shared bike usage data
+- 🔗 It demonstrates integration with public APIs for live data collection
+- 📊 Answers intriguing questions like:
+  - Daily distance traveled by bikes
+  - Peak usage times
+  - City-wide movement patterns
+
+### Technology Choices 🔧
+The stack was selected for performance, maintainability, and developer experience:
+
+| Technology | Purpose | Key Benefit |
+|------------|---------|-------------|
+| **FastAPI** | API Framework | Excellent performance, auto-generated OpenAPI docs |
+| **SQLAlchemy** | ORM | Type-safe queries, database abstraction, connection pooling |
+| **Pydantic** | Data Validation | Runtime type checking, schema enforcement, serialization |
+| **Docker** | Containerization | Environment consistency, dependency isolation |
 
 ## Prerequisites
 1. Docker installed ([Installation Guide](https://docs.docker.com/get-docker/))
@@ -7,10 +30,9 @@
 ## Deployment Steps
 
 ### 1. Clone Repository
-```
-git clone https://github.com/V2kt0r/BubiData.git
-cd BubiData
-```
+`git clone https://github.com/V2kt0r/BubiData.git`
+
+`cd BubiData`
 
 ### 2. Create Environment File
 Create a `.env` file in the project root with these variables:
