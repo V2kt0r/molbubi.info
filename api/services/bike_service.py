@@ -84,15 +84,18 @@ class BikeService:
     def get_all_station_distribution(self) -> list[StationArrivalCountResponse]:
         station_counts = self.repository.get_station_arrival_counts()
 
-        return [
-            StationArrivalCountResponse(
-                station_name=station.name,
-                latitude=station.lat,
-                longitude=station.lng,
-                arrival_count=count,
-            )
-            for station, count in station_counts
-        ]
+        return sorted(
+            [
+                StationArrivalCountResponse(
+                    station_name=station.name,
+                    latitude=station.lat,
+                    longitude=station.lng,
+                    arrival_count=count,
+                )
+                for station, count in station_counts
+            ],
+            key=lambda r: -r.arrival_count,
+        )
 
     def _group_bike_positions(self, bikes):
         return {

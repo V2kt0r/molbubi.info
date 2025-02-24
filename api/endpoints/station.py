@@ -11,5 +11,4 @@ router = APIRouter(prefix="/station", tags=["Station"])
 def get_all_station_distribution(
     service: BikeServiceDep,
 ) -> list[StationArrivalCountResponse]:
-    results = service.get_all_station_distribution()
-    return sorted(results, key=lambda r: -r.arrival_count)
+    return service.get_all_station_distribution()
