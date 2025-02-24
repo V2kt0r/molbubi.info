@@ -4,7 +4,12 @@ import numpy as np
 from haversine import Unit, haversine_vector
 
 from ..repositories.bike_repository import BikeRepository
-from ..schemas import DistanceResponse, HistoryElement, HistoryResponse
+from ..schemas import (
+    DistanceResponse,
+    HistoryElement,
+    HistoryResponse,
+    StationArrivalCountResponse,
+)
 
 
 class BikeService:
@@ -68,6 +73,19 @@ class BikeService:
             total_distance=self.calculate_distance(points),
             travels=len(points) - 1,
         )
+
+    def get_all_station_distribution(self) -> list[StationArrivalCountResponse]:
+        station_counts = self.repository.get_station_arrival_counts()
+
+        return [
+            StationArrivalCountResponse(
+                station_name=station.name,
+                latitude=station.lat,
+                longitude=station.lng,
+                arrival_count=count,
+            )
+            for station, count in station_counts
+        ]
 
     def _group_bike_positions(self, bikes):
         return {

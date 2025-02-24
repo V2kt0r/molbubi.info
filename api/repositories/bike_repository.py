@@ -1,6 +1,7 @@
-from shared.models import BikeModel, StationModel
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
+
+from shared.models import BikeModel, StationModel
 
 
 class BikeRepository:
@@ -28,5 +29,32 @@ class BikeRepository:
             self.session.query(BikeModel)
             .filter(BikeModel.number == bike_number)
             .order_by(BikeModel.timestamp)
+            .all()
+        )
+
+    def get_station_arrival_counts(self):
+        # Subquery to get the earliest timestamp for each bike
+        earliest_logs = (
+            self.session.query(
+                BikeModel.number,
+                func.min(BikeModel.timestamp).label("first_timestamp"),
+            )
+            .group_by(BikeModel.number)
+            .subquery()
+        )
+
+        # Main query
+        return (
+            self.session.query(StationModel, func.count(BikeModel.id).label("count"))
+            .join(BikeModel, BikeModel.station_uid == StationModel.uid)
+            .join(
+                earliest_logs,
+                and_(
+                    BikeModel.number == earliest_logs.c.number,
+                    BikeModel.timestamp > earliest_logs.c.first_timestamp,
+                ),
+            )
+            .group_by(StationModel.uid)
+            .order_by(func.count(BikeModel.id).desc())
             .all()
         )

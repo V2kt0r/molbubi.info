@@ -18,5 +18,12 @@ class HistoryResponse(BaseModel):
 class DistanceResponse(BaseModel):
     bike_number: str
     total_distance: float
-    travels: int
     distance_unit: str = "km"
+    travels: int
+
+
+class StationArrivalCountResponse(BaseModel):
+    station_name: str
+    latitude: float
+    longitude: float
+    arrival_count: int
