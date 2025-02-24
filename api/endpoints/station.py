@@ -1,5 +1,4 @@
-from fastapi import APIRouter, status
-from fastapi.exceptions import HTTPException
+from fastapi import APIRouter
 
 from ..dependencies import BikeServiceDep
 from ..schemas import StationArrivalCountResponse
