@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 
 from pydantic import BaseModel
 
@@ -26,4 +26,9 @@ class StationArrivalCountResponse(BaseModel):
     station_name: str
     latitude: float
     longitude: float
+    arrival_count: int
+
+
+class ArrivalCountByHourResponse(BaseModel):
+    time: time
     arrival_count: int

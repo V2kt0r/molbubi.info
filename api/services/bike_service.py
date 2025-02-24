@@ -1,3 +1,4 @@
+from datetime import time
 from itertools import groupby
 
 import numpy as np
@@ -5,6 +6,7 @@ from haversine import Unit, haversine_vector
 
 from ..repositories.bike_repository import BikeRepository
 from ..schemas import (
+    ArrivalCountByHourResponse,
     DistanceResponse,
     HistoryElement,
     HistoryResponse,
@@ -96,6 +98,19 @@ class BikeService:
             ],
             key=lambda r: -r.arrival_count,
         )
+
+    def get_distribution_by_hour(
+        self,
+    ) -> list[ArrivalCountByHourResponse]:
+        hourly_counts = self.repository.get_arrival_count_by_hour()
+
+        return [
+            ArrivalCountByHourResponse(
+                time=time(hour=int(hour)),
+                arrival_count=count,
+            )
+            for hour, count in hourly_counts
+        ]
 
     def _group_bike_positions(self, bikes):
         return {

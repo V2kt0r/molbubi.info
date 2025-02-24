@@ -1,4 +1,4 @@
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, extract, func, select
 from sqlalchemy.orm import Session
 
 from shared.models import BikeModel, StationModel
@@ -7,6 +7,16 @@ from shared.models import BikeModel, StationModel
 class BikeRepository:
     def __init__(self, session: Session):
         self.session = session
+
+    def _get_earliest_logs_subquery(self):
+        return (
+            self.session.query(
+                BikeModel.number,
+                func.min(BikeModel.timestamp).label("first_timestamp"),
+            )
+            .group_by(BikeModel.number)
+            .subquery()
+        )
 
     def get_bike_history(self, bike_number: str):
         statement = (
@@ -33,17 +43,8 @@ class BikeRepository:
         )
 
     def get_station_arrival_counts(self):
-        # Subquery to get the earliest timestamp for each bike
-        earliest_logs = (
-            self.session.query(
-                BikeModel.number,
-                func.min(BikeModel.timestamp).label("first_timestamp"),
-            )
-            .group_by(BikeModel.number)
-            .subquery()
-        )
+        earliest_logs = self._get_earliest_logs_subquery()
 
-        # Main query
         return (
             self.session.query(StationModel, func.count(BikeModel.id).label("count"))
             .join(BikeModel, BikeModel.station_uid == StationModel.uid)
@@ -56,5 +57,23 @@ class BikeRepository:
             )
             .group_by(StationModel.uid)
             .order_by(func.count(BikeModel.id).desc())
+            .all()
+        )
+
+    def get_arrival_count_by_hour(self):
+        earliest_logs = self._get_earliest_logs_subquery()
+
+        return (
+            self.session.query(
+                extract("hour", BikeModel.timestamp).label("hour"),
+                func.count(BikeModel.id).label("count"),
+            )
+            .join(
+                earliest_logs,
+                (BikeModel.number == earliest_logs.c.number)
+                & (BikeModel.timestamp > earliest_logs.c.first_timestamp),
+            )
+            .group_by(extract("hour", BikeModel.timestamp))
+            .order_by(extract("hour", BikeModel.timestamp))
             .all()
         )
