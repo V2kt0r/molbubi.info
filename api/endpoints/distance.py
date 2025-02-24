@@ -9,8 +9,7 @@ router = APIRouter(prefix="/distance", tags=["Distance"])
 
 @router.get("", response_model=list[DistanceResponse])
 async def get_all_bikes_distances(service: BikeServiceDep) -> list[DistanceResponse]:
-    results = service.get_all_distances()
-    return sorted(results, key=lambda r: -r.total_distance)
+    return service.get_all_distances()
 
 
 @router.get("/{bike_number}", response_model=DistanceResponse)
