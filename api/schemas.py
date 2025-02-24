@@ -32,3 +32,11 @@ class StationArrivalCountResponse(BaseModel):
 class ArrivalCountByHourResponse(BaseModel):
     time: time
     arrival_count: int
+
+
+class HourAndStationArrivalCountResponse(BaseModel):
+    time: time
+    station_name: str
+    latitude: float
+    longitude: float
+    arrival_count: int

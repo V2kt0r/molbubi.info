@@ -77,3 +77,27 @@ class BikeRepository:
             .order_by(extract("hour", BikeModel.timestamp))
             .all()
         )
+
+    def get_hour_and_station_arrival_counts(self):
+        earliest_logs = self._get_earliest_logs_subquery()
+
+        return (
+            self.session.query(
+                StationModel.name.label("station_name"),
+                StationModel.lat.label("latitude"),
+                StationModel.lng.label("longitude"),
+                extract("hour", BikeModel.timestamp).label("hour"),
+                func.count(BikeModel.id).label("count"),
+            )
+            .join(BikeModel, BikeModel.station_uid == StationModel.uid)
+            .join(
+                earliest_logs,
+                (BikeModel.number == earliest_logs.c.number)
+                & (BikeModel.timestamp > earliest_logs.c.first_timestamp),
+            )
+            .group_by(StationModel.uid, extract("hour", BikeModel.timestamp))
+            .order_by(
+                extract("hour", BikeModel.timestamp), func.count(BikeModel.id).desc()
+            )
+            .all()
+        )

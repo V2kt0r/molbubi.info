@@ -10,6 +10,7 @@ from ..schemas import (
     DistanceResponse,
     HistoryElement,
     HistoryResponse,
+    HourAndStationArrivalCountResponse,
     StationArrivalCountResponse,
 )
 
@@ -17,6 +18,14 @@ from ..schemas import (
 class BikeService:
     def __init__(self, repository: BikeRepository):
         self.repository = repository
+
+    def _group_bike_positions(self, bikes):
+        return {
+            num: list(group)
+            for num, group in groupby(
+                sorted(bikes, key=lambda b: b.number), key=lambda b: b.number
+            )
+        }
 
     def get_bike_history(self, bike_number: str) -> HistoryResponse | None:
         result = self.repository.get_bike_history(bike_number)
@@ -112,10 +121,18 @@ class BikeService:
             for hour, count in hourly_counts
         ]
 
-    def _group_bike_positions(self, bikes):
-        return {
-            num: list(group)
-            for num, group in groupby(
-                sorted(bikes, key=lambda b: b.number), key=lambda b: b.number
+    def get_hour_and_station_distribution(
+        self,
+    ) -> list[HourAndStationArrivalCountResponse]:
+        station_hour_counts = self.repository.get_hour_and_station_arrival_counts()
+
+        return [
+            HourAndStationArrivalCountResponse(
+                time=time(hour=int(hour)),
+                station_name=station_name,
+                latitude=latitude,
+                longitude=longitude,
+                arrival_count=count,
             )
-        }
+            for station_name, latitude, longitude, hour, count in station_hour_counts
+        ]
