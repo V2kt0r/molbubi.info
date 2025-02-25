@@ -1,5 +1,6 @@
-requests
-schedule
 pydantic
 sqlalchemy
+asyncio
+asyncpg
 psycopg2-binary
+httpx
