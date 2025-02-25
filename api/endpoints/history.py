@@ -1,22 +1,19 @@
-from fastapi import APIRouter, status
-from fastapi.exceptions import HTTPException
+from fastapi import APIRouter
 
-from ..dependencies import BikeServiceDep
-from ..schemas import HistoryResponse
+from ..core.dependencies.services import HistoryServiceDep
+from ..core.exceptions import BikeNotFoundException
+from ..schemas.history import HistoryResponse
 
 router = APIRouter(prefix="/history", tags=["History"])
 
 
 @router.get("/{bike_number}", response_model=HistoryResponse)
 async def get_bike_history(
-    bike_number: str, bike_service: BikeServiceDep
+    bike_number: str, history_service: HistoryServiceDep
 ) -> HistoryResponse:
-    response = await bike_service.get_bike_history(bike_number)
+    response = await history_service.get_bike_history(bike_number)
 
     if not response:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No history found for bike {bike_number}",
-        )
+        raise BikeNotFoundException(bike_number)
 
     return response

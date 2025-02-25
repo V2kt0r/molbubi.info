@@ -4,8 +4,10 @@ from sqlalchemy.orm import selectinload
 
 from shared.models import BikeModel, StationModel
 
+from .base import BikeRepository
 
-class BikeRepository:
+
+class SQLAlchemyBikeRepository(BikeRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
