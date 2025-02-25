@@ -27,9 +27,8 @@ class BikeService:
             )
         }
 
-    def get_bike_history(self, bike_number: str) -> HistoryResponse | None:
-        result = self.repository.get_bike_history(bike_number)
-
+    async def get_bike_history(self, bike_number: str) -> HistoryResponse | None:
+        result = await self.repository.get_bike_history(bike_number)
         if not result:
             return None
 
@@ -54,11 +53,10 @@ class BikeService:
         start = np.array(points[:-1])
         end = np.array(points[1:])
         distances = haversine_vector(start, end, unit=Unit.KILOMETERS)
-
         return round(np.sum(distances), 2)
 
-    def get_all_distances(self) -> list[DistanceResponse]:
-        bikes = self.repository.get_all_bikes()
+    async def get_all_distances(self) -> list[DistanceResponse]:
+        bikes = await self.repository.get_all_bikes()
         positions = self._group_bike_positions(bikes)
 
         return sorted(
@@ -80,8 +78,8 @@ class BikeService:
             key=lambda r: -r.total_distance,
         )
 
-    def get_bike_distance(self, bike_number: str) -> DistanceResponse | None:
-        bikes = self.repository.get_bikes_by_number(bike_number)
+    async def get_bike_distance(self, bike_number: str) -> DistanceResponse | None:
+        bikes = await self.repository.get_bikes_by_number(bike_number)
         if not bikes:
             return None
 
@@ -92,8 +90,8 @@ class BikeService:
             travels=len(points) - 1,
         )
 
-    def get_all_station_distribution(self) -> list[StationArrivalCountResponse]:
-        station_counts = self.repository.get_station_arrival_counts()
+    async def get_all_station_distribution(self) -> list[StationArrivalCountResponse]:
+        station_counts = await self.repository.get_station_arrival_counts()
 
         return sorted(
             [
@@ -108,10 +106,8 @@ class BikeService:
             key=lambda r: -r.arrival_count,
         )
 
-    def get_distribution_by_hour(
-        self,
-    ) -> list[ArrivalCountByHourResponse]:
-        hourly_counts = self.repository.get_arrival_count_by_hour()
+    async def get_distribution_by_hour(self) -> list[ArrivalCountByHourResponse]:
+        hourly_counts = await self.repository.get_arrival_count_by_hour()
 
         return [
             ArrivalCountByHourResponse(
@@ -121,10 +117,12 @@ class BikeService:
             for hour, count in hourly_counts
         ]
 
-    def get_hour_and_station_distribution(
+    async def get_hour_and_station_distribution(
         self,
     ) -> list[HourAndStationArrivalCountResponse]:
-        station_hour_counts = self.repository.get_hour_and_station_arrival_counts()
+        station_hour_counts = (
+            await self.repository.get_hour_and_station_arrival_counts()
+        )
 
         return [
             HourAndStationArrivalCountResponse(

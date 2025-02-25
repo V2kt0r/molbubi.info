@@ -8,8 +8,10 @@ router = APIRouter(prefix="/history", tags=["History"])
 
 
 @router.get("/{bike_number}", response_model=HistoryResponse)
-def get_bike_history(bike_number: str, bike_service: BikeServiceDep) -> HistoryResponse:
-    response = bike_service.get_bike_history(bike_number)
+async def get_bike_history(
+    bike_number: str, bike_service: BikeServiceDep
+) -> HistoryResponse:
+    response = await bike_service.get_bike_history(bike_number)
 
     if not response:
         raise HTTPException(

@@ -1,29 +1,30 @@
-from typing import Annotated, Generator
+from typing import Annotated, AsyncGenerator
 
 from fastapi import Depends
-from shared.database import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from shared.database import AsyncSessionLocal
 from shared.logger import logger
-from sqlalchemy.orm import Session as SessionType
 
 from .repositories.bike_repository import BikeRepository
 from .services.bike_service import BikeService
 
 
-def get_session() -> Generator[SessionType, any, any]:
-    try:
-        session = Session()
-        yield session
-    except Exception as e:
-        logger.error(f"Error during session dependency: {e}", exc_info=True)
-        session.rollback()
-    finally:
-        session.close()
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        except Exception as e:
+            logger.error(f"Session error: {e}", exc_info=True)
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
 
 
-SessionDep = Annotated[SessionType, Depends(get_session)]
-
-
-def get_bike_repository(session: SessionDep) -> BikeRepository:
+def get_bike_repository(
+    session: Annotated[AsyncSession, Depends(get_session)]
+) -> BikeRepository:
     return BikeRepository(session)
 
 

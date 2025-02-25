@@ -9,14 +9,14 @@ router = APIRouter(prefix="/distance", tags=["Distance"])
 
 @router.get("", response_model=list[DistanceResponse])
 async def get_all_bikes_distances(service: BikeServiceDep) -> list[DistanceResponse]:
-    return service.get_all_distances()
+    return await service.get_all_distances()
 
 
 @router.get("/{bike_number}", response_model=DistanceResponse)
 async def get_bike_distance(
     bike_number: str, service: BikeServiceDep
 ) -> DistanceResponse:
-    response = service.get_bike_distance(bike_number)
+    response = await service.get_bike_distance(bike_number)
 
     if not response:
         raise HTTPException(
