@@ -2,10 +2,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.database import AsyncSessionLocal
-from shared.logger import logger
+from shared.logger import setup_logger
 from shared.models import BikeModel, StationModel
 
 from .schemas import BikeSchema, StationSchema
+
+logger = setup_logger("cache_service", "cache_service.log")
 
 
 class CacheService:

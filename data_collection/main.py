@@ -5,15 +5,16 @@ from datetime import UTC, datetime
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.database import AsyncSessionLocal
-from shared.logger import logger
+from shared.database import AsyncSessionLocal, wait_for_db
+from shared.logger import setup_logger
 from shared.models import BikeModel, StationModel
 
 from .cache_service import CacheService
 from .schemas import ApiResponse, BikeSchema, StationSchema
 
-API_URL = os.getenv("API_URL")
+logger = setup_logger("data_collection", "data_collection.log")
 
+API_URL = os.getenv("API_URL")
 
 cache_service = CacheService()
 
@@ -105,6 +106,7 @@ async def query_api_and_save():
 
 async def main():
     logger.info("Starting data collection service")
+    await wait_for_db()
     await cache_service.fetch()
     while True:
         await query_api_and_save()
