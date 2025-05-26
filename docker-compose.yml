@@ -1,13 +1,26 @@
 services:
+  db_migrator:
+    build:
+      context: .
+      dockerfile: ./db_migrator/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    restart: on-failure
+
   data_collection:
     build:
       context: .
       dockerfile: ./data_collection/Dockerfile
     depends_on:
+      db_migrator:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - API_URL=${API_URL}
 
   api:
@@ -15,14 +28,15 @@ services:
       context: .
       dockerfile: ./api/Dockerfile
     depends_on:
+      db_migrator:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - VERSION=${VERSION}
     ports:
-      - "80:8000"
-    volumes:
-      - ./api/:/app/api/
+      - "${API_DOCKER_PORT}:8000"
 
   db:
     image: postgres:14-alpine
@@ -44,7 +58,7 @@ services:
       - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL}
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD}
     ports:
-      - "5050:80"
+      - "${PGADMIN_DOCKER_PORT}:80"
     depends_on:
       - db
     volumes:
@@ -52,4 +66,8 @@ services:
 
 volumes:
   postgres_data:
+    name: ${ENVIRONMENT}_postgres_data
+    external: true
   pgadmin_data:
+    name: ${ENVIRONMENT}_pgadmin_data
+    external: true

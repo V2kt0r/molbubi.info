@@ -13,10 +13,3 @@ class HistoryElement(BaseModel):
 class HistoryResponse(BaseModel):
     bike_number: str
     history: list[HistoryElement]
-
-
-class DistanceResponse(BaseModel):
-    bike_number: str
-    total_distance: float
-    travels: int
-    distance_unit: str = "km"

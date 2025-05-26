@@ -1,0 +1,100 @@
+name: Deploy to VPS
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'              # Production tags (v1.0.0)
+      - 'v[0-9]+.[0-9]+.[0-9]+-alpha.[0-9]+' # Alpha tags (v1.0.0-alpha.1)
+      - 'v[0-9]+.[0-9]+.[0-9]+-beta.[0-9]+'  # Beta tags (v1.0.0-beta.1)
+
+jobs:
+  determine_environment:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      version: ${{ steps.set-version.outputs.version }}
+    steps:
+      - name: Determine environment based on tag
+        id: set-env
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          if [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+          elif [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$ || $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
+            echo "environment=dev" >> $GITHUB_OUTPUT
+          else
+            echo "Invalid tag format"
+            exit 1
+          fi
+      
+      - name: Set version
+        id: set-version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "version=$TAG" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: determine_environment
+    runs-on: ubuntu-latest
+    environment: ${{ needs.determine_environment.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOYER_SSH_KEY }}
+          
+      - name: Add host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ vars.SERVER_ADDRESS }} >> ~/.ssh/known_hosts
+      
+      - name: Create deployment directory
+        run: |
+          echo "Creating deployment directory for version ${{ needs.determine_environment.outputs.version }}"
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "mkdir -p ~/deployments/${{ needs.determine_environment.outputs.environment }}/${{ needs.determine_environment.outputs.version }}"
+      
+      - name: Transfer files
+        run: |
+          rsync -avz --exclude '.git' --exclude '.github' \
+            ./ deployer@${{ vars.SERVER_ADDRESS }}:~/deployments/${{ needs.determine_environment.outputs.environment }}/${{ needs.determine_environment.outputs.version }}/
+      
+      - name: Create .env file
+        run: |
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "cat > ~/deployments/${{ needs.determine_environment.outputs.environment }}/${{ needs.determine_environment.outputs.version }}/.env << 'EOL'
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=${{ vars.POSTGRES_DB }}
+          PGADMIN_EMAIL=${{ secrets.PGADMIN_EMAIL }}
+          PGADMIN_PASSWORD=${{ secrets.PGADMIN_PASSWORD }}
+          API_URL=${{ vars.API_URL }}
+          API_DOCKER_PORT=${{ vars.API_DOCKER_PORT }}
+          PGADMIN_DOCKER_PORT=${{ vars.PGADMIN_DOCKER_PORT }}
+          VERSION=${{ needs.determine_environment.outputs.version }}
+          ENVIRONMENT=${{ needs.determine_environment.outputs.environment }}
+          EOL"
+      
+      - name: Ensure Docker volumes exist
+        run: |
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "docker volume create --name ${{ needs.determine_environment.outputs.environment }}_postgres_data || true && \
+          docker volume create --name ${{ needs.determine_environment.outputs.environment }}_pgadmin_data || true"
+
+      - name: Stop previous deployment
+        run: |
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "if [ -L ~/deployments/${{ needs.determine_environment.outputs.environment }}/current ] && [ -d \$(readlink -f ~/deployments/${{ needs.determine_environment.outputs.environment }}/current) ]; then cd \$(readlink -f ~/deployments/${{ needs.determine_environment.outputs.environment }}/current) && docker compose down; fi"
+
+      - name: Deploy application
+        run: |
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "cd ~/deployments/${{ needs.determine_environment.outputs.environment }}/${{ needs.determine_environment.outputs.version }} && \
+          docker compose up -d --build"
+      
+      - name: Update symlink to current deployment
+        run: |
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "ln -sfn ~/deployments/${{ needs.determine_environment.outputs.environment }}/${{ needs.determine_environment.outputs.version }} ~/deployments/${{ needs.determine_environment.outputs.environment }}/current"
+      
+      - name: Clean up old deployments
+        run: |
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "cd ~/deployments/${{ needs.determine_environment.outputs.environment }} && ls -1t | grep -v 'current' | tail -n +6 | xargs -I {} sh -c 'echo \"Removing old deployment: {}\"; rm -rf {}'"

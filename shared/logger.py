@@ -26,7 +26,3 @@ def setup_logger(name, log_file, level=logging.INFO):
     logger.addHandler(console_handler)
 
     return logger
-
-
-# Create a logger instance
-logger = setup_logger("data_collection", "data_collection.log")
