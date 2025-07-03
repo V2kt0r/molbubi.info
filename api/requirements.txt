@@ -1,9 +1,0 @@
-sqlalchemy
-asyncio
-asyncpg
-psycopg2-binary
-fastapi
-uvicorn
-pydantic
-haversine
-numpy
