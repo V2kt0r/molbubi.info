@@ -1,0 +1,91 @@
+services:
+  # The data collector service
+  collector:
+    build: ./data-collector
+    container_name: data-collector-service
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # The data processor service
+  processor:
+    build: ./data-processor
+    container_name: data-processor-service
+    env_file:
+      - .env
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  # The new API service
+  api:
+    build: ./api-service
+    container_name: bikeshare-api-service
+    env_file:
+      - .env
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+    ports:
+      - "80:8000"
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin-service
+    env_file:
+      - .env
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis-gui:
+    image: redis/redisinsight:latest
+    container_name: redis-gui-service
+    ports:
+      - "8001:5540"
+    volumes:
+      - redisinsight_data:/data
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # The Redis service
+  redis:
+    image: "redis:alpine"
+    container_name: redis-cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # The PostgreSQL/TimescaleDB service
+  postgres-db:
+    image: "timescale/timescaledb:latest-pg14"
+    container_name: postgres-timescaledb
+    env_file:
+      - .env
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redisinsight_data:
