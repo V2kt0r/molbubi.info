@@ -15,12 +15,12 @@ class BikeService:
         last_movement = self.bike_repo.get_latest_movement(bike_number)
         if not last_movement:
             raise BikeNotFound(bike_number)
-        
+
         station = self.station_repo.get_by_uid(last_movement.end_station_uid)
         return bike_schemas.BikeLocation(
             bike_number=bike_number,
             current_station=station,
-            last_seen=last_movement.end_time
+            last_seen=last_movement.end_time,
         )
 
     def get_all_bikes_summary(self, skip: int, limit: int):
@@ -29,8 +29,10 @@ class BikeService:
             bike_schemas.BikeSummary(
                 bike_number=bike_number,
                 total_trips=total_trips,
-                total_distance_km=round(total_distance_km, 2) if total_distance_km else 0.0,
-                current_location=station
+                total_distance_km=(
+                    round(total_distance_km, 2) if total_distance_km else 0.0
+                ),
+                current_location=station,
             )
             for bike_number, total_trips, total_distance_km, station in summaries
         ]

@@ -14,6 +14,7 @@ from .processing import ProcessingService
 
 logger = logging.getLogger(__name__)
 
+
 class DataConsumer:
     def __init__(self, redis_client: redis.Redis):
         self.redis_client = redis_client
@@ -25,10 +26,7 @@ class DataConsumer:
     def _ensure_consumer_group(self):
         try:
             self.redis_client.xgroup_create(
-                name=self.stream_name,
-                groupname=self.group_name,
-                id='0',
-                mkstream=True
+                name=self.stream_name, groupname=self.group_name, id="0", mkstream=True
             )
             logger.info(f"Consumer group '{self.group_name}' created.")
         except redis.ResponseError as e:
@@ -44,9 +42,9 @@ class DataConsumer:
                 messages = self.redis_client.xreadgroup(
                     groupname=self.group_name,
                     consumername=self.consumer_name,
-                    streams={self.stream_name: '>'},
+                    streams={self.stream_name: ">"},
                     count=1,
-                    block=2000
+                    block=2000,
                 )
                 if not messages:
                     continue
@@ -61,19 +59,25 @@ class DataConsumer:
     def _handle_message(self, msg_id: str, data: dict):
         db = SessionLocal()
         try:
-            snapshot = ApiResponse.model_validate_json(data['data'])
-            
-            redis_repo = RedisRepository(host=settings.REDIS_HOST, port=settings.REDIS_PORT)
+            snapshot = ApiResponse.model_validate_json(data["data"])
+
+            redis_repo = RedisRepository(
+                host=settings.REDIS_HOST, port=settings.REDIS_PORT
+            )
             processing_service = ProcessingService(db, redis_repo)
             processing_service.process_snapshot(snapshot)
-            
+
             self.redis_client.xack(self.stream_name, self.group_name, msg_id)
             logger.info(f"Successfully processed and acknowledged message {msg_id}")
 
         except (ValidationError, json.JSONDecodeError) as e:
-            logger.error(f"Validation/JSON error for message {msg_id}: {e}. Acknowledging to avoid reprocessing.")
+            logger.error(
+                f"Validation/JSON error for message {msg_id}: {e}. Acknowledging to avoid reprocessing."
+            )
             self.redis_client.xack(self.stream_name, self.group_name, msg_id)
         except Exception as e:
-            logger.error(f"Failed to process message {msg_id}: {e}. It will be retried.")
+            logger.error(
+                f"Failed to process message {msg_id}: {e}. It will be retried."
+            )
         finally:
             db.close()

@@ -11,52 +11,84 @@ class BaseRepository:
     def __init__(self, db_session: Session):
         self.db = db_session
 
+
 class StationRepository(BaseRepository):
     def get_by_uid(self, station_uid: int):
-        return self.db.query(models.Station).filter(models.Station.uid == station_uid).first()
+        return (
+            self.db.query(models.Station)
+            .filter(models.Station.uid == station_uid)
+            .first()
+        )
 
     def get_all(self, skip: int = 0, limit: int = 100):
         return self.db.query(models.Station).offset(skip).limit(limit).all()
 
+
 class BikeRepository(BaseRepository):
     def get_movements(self, bike_number: str, skip: int = 0, limit: int = 25):
-        return self.db.query(models.BikeMovement).filter(
-            models.BikeMovement.bike_number == bike_number
-        ).order_by(desc(models.BikeMovement.start_time)).offset(skip).limit(limit).all()
+        return (
+            self.db.query(models.BikeMovement)
+            .filter(models.BikeMovement.bike_number == bike_number)
+            .order_by(desc(models.BikeMovement.start_time))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
 
     def get_latest_movement(self, bike_number: str):
-        return self.db.query(models.BikeMovement).filter(
-            models.BikeMovement.bike_number == bike_number
-        ).order_by(desc(models.BikeMovement.end_time)).first()
+        return (
+            self.db.query(models.BikeMovement)
+            .filter(models.BikeMovement.bike_number == bike_number)
+            .order_by(desc(models.BikeMovement.end_time))
+            .first()
+        )
 
     def get_all_summary(self, skip: int = 0, limit: int = 100):
-        summary_sq = self.db.query(
-            models.BikeMovement.bike_number,
-            func.count().label("total_trips"),
-            func.sum(models.BikeMovement.distance_km).label("total_distance_km")
-        ).group_by(models.BikeMovement.bike_number).subquery()
+        summary_sq = (
+            self.db.query(
+                models.BikeMovement.bike_number,
+                func.count().label("total_trips"),
+                func.sum(models.BikeMovement.distance_km).label("total_distance_km"),
+            )
+            .group_by(models.BikeMovement.bike_number)
+            .subquery()
+        )
 
-        latest_movement_sq = self.db.query(
-            models.BikeMovement.bike_number,
-            models.BikeMovement.end_station_uid
-        ).distinct(models.BikeMovement.bike_number).order_by(
-            models.BikeMovement.bike_number, desc(models.BikeMovement.end_time)
-        ).subquery()
+        latest_movement_sq = (
+            self.db.query(
+                models.BikeMovement.bike_number, models.BikeMovement.end_station_uid
+            )
+            .distinct(models.BikeMovement.bike_number)
+            .order_by(
+                models.BikeMovement.bike_number, desc(models.BikeMovement.end_time)
+            )
+            .subquery()
+        )
 
-        return self.db.query(
-            summary_sq.c.bike_number,
-            summary_sq.c.total_trips,
-            summary_sq.c.total_distance_km,
-            models.Station
-        ).join(
-            latest_movement_sq, latest_movement_sq.c.bike_number == summary_sq.c.bike_number
-        ).join(
-            models.Station, models.Station.uid == latest_movement_sq.c.end_station_uid
-        ).offset(skip).limit(limit).all()
+        return (
+            self.db.query(
+                summary_sq.c.bike_number,
+                summary_sq.c.total_trips,
+                summary_sq.c.total_distance_km,
+                models.Station,
+            )
+            .join(
+                latest_movement_sq,
+                latest_movement_sq.c.bike_number == summary_sq.c.bike_number,
+            )
+            .join(
+                models.Station,
+                models.Station.uid == latest_movement_sq.c.end_station_uid,
+            )
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
 
 class RedisRepository:
     def __init__(self):
-        redis_host = settings.POSTGRES_SERVER.replace('postgres-db', 'redis')
+        redis_host = settings.POSTGRES_SERVER.replace("postgres-db", "redis")
         self.client = redis.Redis(host=redis_host, port=6379, decode_responses=True)
 
     def get_bikes_at_station(self, station_uid: int) -> list[str]:

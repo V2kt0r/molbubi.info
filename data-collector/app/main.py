@@ -6,8 +6,11 @@ from app.core.config import settings
 from app.services.poller import Poller
 from app.storage.redis_client import RedisClient
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
+
 
 async def main_loop(poller: Poller):
     logger.info("Data Collector service started.")
@@ -20,6 +23,7 @@ async def main_loop(poller: Poller):
         except Exception as e:
             logger.critical(f"Unexpected error in polling loop: {e}", exc_info=True)
         await asyncio.sleep(settings.POLLING_INTERVAL_SECONDS)
+
 
 if __name__ == "__main__":
     api_client = ApiClient()

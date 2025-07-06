@@ -9,8 +9,14 @@ from app.storage.redis_client import RedisClient
 
 logger = logging.getLogger(__name__)
 
+
 class Poller:
-    def __init__(self, api_client: ApiClient, redis_client: RedisClient, stream_name: str = settings.REDIS_STREAM_NAME):
+    def __init__(
+        self,
+        api_client: ApiClient,
+        redis_client: RedisClient,
+        stream_name: str = settings.REDIS_STREAM_NAME,
+    ):
         self.api_client = api_client
         self.redis_client = redis_client
         self.stream_name = stream_name

@@ -10,6 +10,7 @@ from ..dependencies import get_station_service
 
 router = APIRouter()
 
+
 @cbv(router)
 class StationCBV:
     service: StationService = Depends(get_station_service)

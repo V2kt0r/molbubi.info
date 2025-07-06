@@ -10,6 +10,7 @@ from ..dependencies import get_bike_service
 
 router = APIRouter()
 
+
 @cbv(router)
 class BikeCBV:
     service: BikeService = Depends(get_bike_service)
@@ -18,7 +19,9 @@ class BikeCBV:
     def read_all_bikes_summary(self, skip: int = 0, limit: int = 100):
         return self.service.get_all_bikes_summary(skip, limit)
 
-    @router.get("/{bike_number}/history", response_model=List[bike_schemas.BikeMovement])
+    @router.get(
+        "/{bike_number}/history", response_model=List[bike_schemas.BikeMovement]
+    )
     def read_bike_history(self, bike_number: str, skip: int = 0, limit: int = 25):
         return self.service.get_bike_history(bike_number, skip, limit)
 

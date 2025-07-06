@@ -12,9 +12,14 @@ class BaseRepository:
     def __init__(self, db_session: Session):
         self.db = db_session
 
+
 class StationRepository(BaseRepository):
     def get_by_uid(self, station_uid: int) -> models.Station | None:
-        return self.db.query(models.Station).filter(models.Station.uid == station_uid).first()
+        return (
+            self.db.query(models.Station)
+            .filter(models.Station.uid == station_uid)
+            .first()
+        )
 
     def upsert(self, station: StationSchema) -> models.Station:
         db_station = self.get_by_uid(station.uid)
@@ -25,10 +30,11 @@ class StationRepository(BaseRepository):
             db_station.name = station.name
             db_station.lat = station.lat
             db_station.lng = station.lng
-        
+
         self.db.commit()
         self.db.refresh(db_station)
         return db_station
+
 
 class BikeMovementRepository(BaseRepository):
     def create(self, movement_data: dict) -> models.BikeMovement:
@@ -38,8 +44,11 @@ class BikeMovementRepository(BaseRepository):
         self.db.refresh(db_movement)
         return db_movement
 
+
 class RedisRepository:
-    def __init__(self, host: str = settings.REDIS_HOST, port: int = settings.REDIS_PORT):
+    def __init__(
+        self, host: str = settings.REDIS_HOST, port: int = settings.REDIS_PORT
+    ):
         self.client = redis.Redis(host=host, port=port, decode_responses=True)
         self.bike_state_hash = settings.REDIS_BIKE_STATE_HASH
         self.station_bikes_prefix = "station_bikes:"
