@@ -1,3 +1,4 @@
+from datetime import datetime
 import redis
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
@@ -84,6 +85,18 @@ class BikeRepository(BaseRepository):
             .limit(limit)
             .all()
         )
+
+
+class BikeStayRepository(BaseRepository):
+    def get_bikes_at_station_at_time(self, station_uid: int, timestamp: datetime):
+        """
+        Finds all bike stays that were active at a specific station at a specific time.
+        """
+        return self.db.query(models.BikeStay).filter(
+            models.BikeStay.station_uid == station_uid,
+            models.BikeStay.start_time <= timestamp,
+            (models.BikeStay.end_time == None) | (models.BikeStay.end_time >= timestamp)
+        ).all()
 
 
 class RedisRepository:

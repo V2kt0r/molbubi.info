@@ -32,3 +32,4 @@ class BikeState(BaseModel):
 
     station_uid: int
     timestamp: float = Field(default_factory=time.time)
+    stay_start_time: float | None = None

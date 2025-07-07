@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import redis
 from sqlalchemy.orm import Session
 
@@ -68,3 +70,24 @@ class RedisRepository:
         if bike_numbers:
             pipeline.sadd(station_key, *bike_numbers)
         pipeline.execute()
+
+
+class BikeStayRepository(BaseRepository):
+    def find_active_stay(self, bike_number: str):
+        """Finds the current stay for a bike (where end_time is NULL)."""
+        return self.db.query(models.BikeStay).filter(
+            models.BikeStay.bike_number == bike_number,
+            models.BikeStay.end_time == None
+        ).first()
+
+    def create_stay(self, stay_data: dict):
+        """Creates a new stay record."""
+        db_stay = models.BikeStay(**stay_data)
+        self.db.add(db_stay)
+        self.db.commit()
+        return db_stay
+
+    def end_stay(self, stay: models.BikeStay, end_time: datetime):
+        """Updates the end_time of an existing stay."""
+        stay.end_time = end_time
+        self.db.commit()

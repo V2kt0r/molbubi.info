@@ -35,3 +35,18 @@ class BikeMovement(Base):
         PrimaryKeyConstraint("bike_number", "start_time"),
         {},
     )
+
+
+class BikeStay(Base):
+    __tablename__ = "bike_stays"
+    
+    bike_number = Column(String, primary_key=True, nullable=False)
+    station_uid = Column(Integer, ForeignKey("stations.uid"), primary_key=True, nullable=False)
+    start_time = Column(DateTime(timezone=True), primary_key=True, nullable=False)
+    
+    end_time = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('bike_number', 'station_uid', 'start_time'),
+        {},
+    )
