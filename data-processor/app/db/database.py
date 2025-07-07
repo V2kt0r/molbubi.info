@@ -32,9 +32,16 @@ def init_db():
             # Convert the movements table to a hypertable
             connection.execute(
                 text(
-                    "SELECT create_hypertable('bike_movements', 'start_time', if_not_exists => TRUE);"
+                    "SELECT create_hypertable('bike_movements', 'start_time', if_not_exists => TRUE, migrate_data => true);"
                 )
             )
+
+            connection.execute(
+                text(
+                    "SELECT create_hypertable('bike_stays', 'start_time', if_not_exists => TRUE, migrate_data => true);"
+                )
+            )
+
             connection.commit()
         logger.info("Database initialized successfully and hypertable created.")
     except Exception as e:
