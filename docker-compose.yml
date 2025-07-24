@@ -53,7 +53,7 @@ services:
     image: redis/redisinsight:latest
     container_name: redis-gui-service
     ports:
-      - "8001:5540"
+      - "${REDIS_INSIGHT_DOCKER_PORT}:5540"
     volumes:
       - redisinsight_data:/data
     depends_on:
