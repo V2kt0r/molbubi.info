@@ -20,7 +20,7 @@ def main():
 
     # Initialize Redis client and start the consumer
     redis_client = redis.Redis(
-        host=settings.REDIS_HOST, port=settings.REDIS_PORT, decode_responses=True
+        host=settings.REDIS_HOST, port=settings.REDIS_DOCKER_PORT, decode_responses=True
     )
     consumer = DataConsumer(redis_client)
     consumer.run()

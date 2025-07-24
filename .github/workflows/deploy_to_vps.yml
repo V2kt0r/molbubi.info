@@ -65,12 +65,22 @@ jobs:
       - name: Create .env file
         run: |
           ssh deployer@${{ vars.SERVER_ADDRESS }} "cat > ~/deployments/${{ needs.determine_environment.outputs.environment }}/${{ needs.determine_environment.outputs.version }}/.env << 'EOL'
+          API_URL=${{ vars.API_URL }}
+          POLLING_INTERVAL_SECONDS=${{ vars.POLLING_INTERVAL_SECONDS }}
+          REDIS_HOST=${{ vars.REDIS_HOST }}
+          REDIS_DOCKER_PORT=${{ vars.REDIS_DOCKER_PORT }}
+          REDIS_STREAM_NAME=${{ vars.REDIS_STREAM_NAME }}
+          REDIS_CONSUMER_GROUP=${{ vars.REDIS_CONSUMER_GROUP }}
+          REDIS_CONSUMER_NAME=${{ vars.REDIS_CONSUMER_NAME }}
+          REDIS_BIKE_STATE_HASH=${{ vars.REDIS_BIKE_STATE_HASH }}
+          REDIS_STATION_BIKES_SET_PREFIX=${{ vars.REDIS_STATION_BIKES_SET_PREFIX }}
           POSTGRES_USER=${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB=${{ vars.POSTGRES_DB }}
+          POSTGRES_SERVER=${{ vars.POSTGRES_SERVER }}
+          POSTGRES_PORT=${{ vars.POSTGRES_PORT }}
           PGADMIN_EMAIL=${{ secrets.PGADMIN_EMAIL }}
           PGADMIN_PASSWORD=${{ secrets.PGADMIN_PASSWORD }}
-          API_URL=${{ vars.API_URL }}
           API_DOCKER_PORT=${{ vars.API_DOCKER_PORT }}
           PGADMIN_DOCKER_PORT=${{ vars.PGADMIN_DOCKER_PORT }}
           VERSION=${{ needs.determine_environment.outputs.version }}
@@ -80,7 +90,8 @@ jobs:
       - name: Ensure Docker volumes exist
         run: |
           ssh deployer@${{ vars.SERVER_ADDRESS }} "docker volume create --name ${{ needs.determine_environment.outputs.environment }}_postgres_data || true && \
-          docker volume create --name ${{ needs.determine_environment.outputs.environment }}_pgadmin_data || true"
+          docker volume create --name ${{ needs.determine_environment.outputs.environment }}_pgadmin_data || true" && \
+          docker volume create --name ${{ needs.determine_environment.outputs.environment }}_redisinsight_data || true"
 
       - name: Stop previous deployment
         run: |

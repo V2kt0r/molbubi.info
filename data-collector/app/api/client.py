@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class ApiClient:
-    def __init__(self, api_url: str = settings.NEXTBIKE_API_URL, timeout: int = 10):
+    def __init__(self, api_url: str = settings.API_URL, timeout: int = 10):
         self.api_url = api_url
         self.timeout = timeout
 

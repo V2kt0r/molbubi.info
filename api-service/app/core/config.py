@@ -1,12 +1,18 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    POSTGRES_USER: str = "user"
-    POSTGRES_PASSWORD: str = "password"
-    POSTGRES_SERVER: str = "postgres-db"
-    POSTGRES_PORT: int = 5432
-    POSTGRES_DB: str = "bikedata"
+    model_config = SettingsConfigDict(env_file='.env')
+
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_SERVER: str
+    POSTGRES_PORT: int
+    POSTGRES_DB: str
+
+    REDIS_HOST: str
+    REDIS_DOCKER_PORT: int
+    REDIS_STATION_BIKES_SET_PREFIX: str
 
     @property
     def database_url(self) -> str:

@@ -62,7 +62,7 @@ class DataConsumer:
             snapshot = ApiResponse.model_validate_json(data["data"])
 
             redis_repo = RedisRepository(
-                host=settings.REDIS_HOST, port=settings.REDIS_PORT
+                host=settings.REDIS_HOST, port=settings.REDIS_DOCKER_PORT
             )
             processing_service = ProcessingService(db, redis_repo)
             processing_service.process_snapshot(snapshot)

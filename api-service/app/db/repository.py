@@ -100,10 +100,9 @@ class BikeStayRepository(BaseRepository):
 
 
 class RedisRepository:
-    def __init__(self):
-        redis_host = settings.POSTGRES_SERVER.replace("postgres-db", "redis")
-        self.client = redis.Redis(host=redis_host, port=6379, decode_responses=True)
+    def __init__(self, host: str = settings.REDIS_HOST, port: int = settings.REDIS_DOCKER_PORT):
+        self.client = redis.Redis(host=host, port=port, decode_responses=True)
 
     def get_bikes_at_station(self, station_uid: int) -> list[str]:
-        station_key = f"station_bikes:{station_uid}"
+        station_key = f"{settings.REDIS_STATION_BIKES_SET_PREFIX}:{station_uid}"
         return list(self.client.smembers(station_key))

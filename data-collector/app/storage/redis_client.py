@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class RedisClient:
     def __init__(
-        self, host: str = settings.REDIS_HOST, port: int = settings.REDIS_PORT
+        self, host: str = settings.REDIS_HOST, port: int = settings.REDIS_DOCKER_PORT
     ):
         try:
             self.client = redis.Redis(host=host, port=port, decode_responses=True)

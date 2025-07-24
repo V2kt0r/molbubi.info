@@ -26,7 +26,7 @@ class StationRepository(BaseRepository):
     def upsert(self, station: StationSchema) -> models.Station:
         db_station = self.get_by_uid(station.uid)
         if not db_station:
-            db_station = models.Station(**station.model_dump())
+            db_station = models.Station(**station.model_dump(exclude={"spot", "bike_list"}))
             self.db.add(db_station)
         else:
             db_station.name = station.name
@@ -49,11 +49,11 @@ class BikeMovementRepository(BaseRepository):
 
 class RedisRepository:
     def __init__(
-        self, host: str = settings.REDIS_HOST, port: int = settings.REDIS_PORT
+        self, host: str = settings.REDIS_HOST, port: int = settings.REDIS_DOCKER_PORT
     ):
         self.client = redis.Redis(host=host, port=port, decode_responses=True)
         self.bike_state_hash = settings.REDIS_BIKE_STATE_HASH
-        self.station_bikes_prefix = "station_bikes:"
+        self.station_bikes_prefix = settings.REDIS_STATION_BIKES_SET_PREFIX
 
     def get_bike_state(self, bike_number: str) -> BikeState | None:
         state_json = self.client.hget(self.bike_state_hash, bike_number)

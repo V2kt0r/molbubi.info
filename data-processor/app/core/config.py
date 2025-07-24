@@ -1,24 +1,26 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file='.env')
+
     # Redis for consuming data
-    REDIS_HOST: str = "redis"
-    REDIS_PORT: int = 6379
-    REDIS_STREAM_NAME: str = "bike_data_stream"
-    REDIS_CONSUMER_GROUP: str = "processing_group"
-    REDIS_CONSUMER_NAME: str = "processor_1"  # In real scaling, this would be dynamic
+    REDIS_HOST: str
+    REDIS_DOCKER_PORT: int
+    REDIS_STREAM_NAME: str
+    REDIS_CONSUMER_GROUP: str
+    REDIS_CONSUMER_NAME: str
 
     # Redis for storing bike state
-    REDIS_BIKE_STATE_HASH: str = "bike_states"
-    REDIS_STATION_BIKES_SET_PREFIX: str = "station_bikes:"
+    REDIS_BIKE_STATE_HASH: str
+    REDIS_STATION_BIKES_SET_PREFIX: str
 
     # PostgreSQL Connection
-    POSTGRES_USER: str = "user"
-    POSTGRES_PASSWORD: str = "password"
-    POSTGRES_SERVER: str = "postgres"
-    POSTGRES_PORT: int = 5432
-    POSTGRES_DB: str = "bikedata"
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_SERVER: str
+    POSTGRES_PORT: int
+    POSTGRES_DB: str
 
     @property
     def database_url(self) -> str:

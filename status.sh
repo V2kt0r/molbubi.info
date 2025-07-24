@@ -11,7 +11,7 @@ echo ""
 echo "🏥 Health Status:"
 
 # Check each service health
-services=("postgres-db" "redis")
+services=("db" "redis")
 
 for service in "${services[@]}"; do
     if docker-compose ps -q $service > /dev/null 2>&1; then
