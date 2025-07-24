@@ -2,7 +2,6 @@ services:
   # The data collector service
   collector:
     build: ./data-collector
-    container_name: data-collector-service
     env_file:
       - .env
     depends_on:
@@ -12,7 +11,6 @@ services:
   # The data processor service
   processor:
     build: ./data-processor
-    container_name: data-processor-service
     env_file:
       - .env
     depends_on:
@@ -25,7 +23,6 @@ services:
   # The new API service
   api:
     build: ./api-service
-    container_name: bikeshare-api-service
     env_file:
       - .env
     depends_on:
@@ -37,7 +34,6 @@ services:
 
   pgadmin:
     image: dpage/pgadmin4
-    container_name: pgadmin-service
     env_file:
       - .env
     ports:
@@ -51,7 +47,6 @@ services:
 
   redis-gui:
     image: redis/redisinsight:latest
-    container_name: redis-gui-service
     ports:
       - "${REDIS_INSIGHT_DOCKER_PORT}:5540"
     volumes:
@@ -63,7 +58,6 @@ services:
   # The Redis service
   redis:
     image: "redis:alpine"
-    container_name: redis-cache
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -74,7 +68,6 @@ services:
   # The PostgreSQL/TimescaleDB service
   db:
     image: "timescale/timescaledb:latest-pg14"
-    container_name: postgres-timescaledb
     env_file:
       - .env
     volumes:
