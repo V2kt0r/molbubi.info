@@ -90,7 +90,7 @@ jobs:
       - name: Ensure Docker volumes exist
         run: |
           ssh deployer@${{ vars.SERVER_ADDRESS }} "docker volume create --name ${{ needs.determine_environment.outputs.environment }}_postgres_data || true && \
-          docker volume create --name ${{ needs.determine_environment.outputs.environment }}_pgadmin_data || true" && \
+          docker volume create --name ${{ needs.determine_environment.outputs.environment }}_pgadmin_data || true && \
           docker volume create --name ${{ needs.determine_environment.outputs.environment }}_redisinsight_data || true"
 
       - name: Stop previous deployment
