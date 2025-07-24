@@ -70,11 +70,14 @@ class DataConsumer:
             self.redis_client.xack(self.stream_name, self.group_name, msg_id)
             logger.info(f"Successfully processed and acknowledged message {msg_id}")
 
+            self.redis_client.xtrim(self.stream_name, minid=msg_id)
+            logger.info(f"Stream '{self.stream_name}' trimmed up to message {msg_id}")
         except (ValidationError, json.JSONDecodeError) as e:
             logger.error(
                 f"Validation/JSON error for message {msg_id}: {e}. Acknowledging to avoid reprocessing."
             )
             self.redis_client.xack(self.stream_name, self.group_name, msg_id)
+            self.redis_client.xtrim(self.stream_name, minid=msg_id)
         except Exception as e:
             logger.error(
                 f"Failed to process message {msg_id}: {e}. It will be retried."
