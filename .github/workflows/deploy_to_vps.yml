@@ -80,8 +80,8 @@ jobs:
           POSTGRES_DB=${{ vars.POSTGRES_DB }}
           POSTGRES_SERVER=${{ vars.POSTGRES_SERVER }}
           POSTGRES_PORT=${{ vars.POSTGRES_PORT }}
-          PGADMIN_EMAIL=${{ secrets.PGADMIN_EMAIL }}
-          PGADMIN_PASSWORD=${{ secrets.PGADMIN_PASSWORD }}
+          PGADMIN_DEFAULT_EMAIL=${{ secrets.PGADMIN_EMAIL }}
+          PGADMIN_DEFAULT_PASSWORD=${{ secrets.PGADMIN_PASSWORD }}
           API_DOCKER_PORT=${{ vars.API_DOCKER_PORT }}
           PGADMIN_DOCKER_PORT=${{ vars.PGADMIN_DOCKER_PORT }}
           VERSION=${{ needs.determine_environment.outputs.version }}
