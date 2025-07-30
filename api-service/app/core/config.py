@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     REDIS_DOCKER_PORT: int
     REDIS_STATION_BIKES_SET_PREFIX: str
 
+    VERSION: str
+
     @property
     def database_url(self) -> str:
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"

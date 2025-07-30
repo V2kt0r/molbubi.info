@@ -4,9 +4,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.api.v1.api import api_router
+from app.core.config import settings
 from app.core.exceptions import ResourceNotFound
 
-app = FastAPI(title="BikeShare Data API", openapi_url="/api/v1/openapi.json")
+app = FastAPI(title="molbubi.info", openapi_url="/api/v1/openapi.json", version=settings.VERSION)
 
 
 @app.middleware("http")
@@ -37,4 +38,4 @@ app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the BikeShare Data API"}
+    return {"message": "Welcome to molbubi.info"}

@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "api-service"
-version = "0.1.0"
+name = "molbubi.info"
+version = "0.3.0-alpha.6"
 description = ""
-authors = ["Your Name <you@example.com>"]
+authors = ["Fibo"]
 
 [tool.poetry.dependencies]
 python = "^3.12"
