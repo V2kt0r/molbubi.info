@@ -64,7 +64,7 @@ class RedisRepository:
         self.client.hset(self.bike_state_hash, bike_number, state.model_dump_json())
 
     def update_station_occupancy(self, station_uid: int, bike_numbers: set[str]):
-        station_key = f"{self.station_bikes_prefix}{station_uid}"
+        station_key = f"{self.station_bikes_prefix}:{station_uid}"
         pipeline = self.client.pipeline()
         pipeline.delete(station_key)
         if bike_numbers:
