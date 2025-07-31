@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from .station import Station
+from app.stations.schema import Station
 
 
 class BikeMovement(BaseModel):

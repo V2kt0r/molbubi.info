@@ -1,8 +1,8 @@
 from datetime import datetime
 
-from app.core.exceptions import StationNotFound
-from app.db.repository import BikeStayRepository, RedisRepository, StationRepository
-from app.schemas.station import StationStats
+from app.shared.exceptions import StationNotFound
+from app.stations.repository import BikeStayRepository, RedisRepository, StationRepository
+from app.stations.schema import StationStats
 
 
 class StationService:

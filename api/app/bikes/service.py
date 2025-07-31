@@ -1,6 +1,7 @@
-from app.core.exceptions import BikeNotFound
-from app.db.repository import BikeRepository, StationRepository
-from app.schemas import bike as bike_schemas
+from app.shared.exceptions import BikeNotFound
+from app.bikes.repository import BikeRepository
+from app.stations.repository import StationRepository
+from app.bikes import schema as bike_schemas
 
 
 class BikeService:

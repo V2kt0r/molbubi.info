@@ -1,7 +1,7 @@
 from datetime import date
 
-from app.db.repository import DistributionRepository
-from app.schemas.distribution import HourlyDistribution
+from app.distribution.repository import DistributionRepository
+from app.distribution.schema import HourlyDistribution
 
 
 class DistributionService:

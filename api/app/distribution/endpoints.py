@@ -3,9 +3,9 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from fastapi_restful.cbv import cbv
 
-from app.schemas.distribution import HourlyDistribution
-from app.services.distribution_service import DistributionService
-from app.api.v1.dependencies import get_distribution_service
+from app.distribution.schema import HourlyDistribution
+from app.distribution.service import DistributionService
+from app.shared.dependencies import get_distribution_service
 
 router = APIRouter()
 

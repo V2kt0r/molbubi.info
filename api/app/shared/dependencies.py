@@ -1,17 +1,17 @@
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from app.db.database import get_db
-from app.db.repository import (
-    BikeRepository,
-    BikeStayRepository,
-    DistributionRepository,
-    RedisRepository,
-    StationRepository,
-)
-from app.services.bike_service import BikeService
-from app.services.distribution_service import DistributionService
-from app.services.station_service import StationService
+from app.shared.database import get_db
+
+# Repository imports
+from app.bikes.repository import BikeRepository
+from app.stations.repository import BikeStayRepository, RedisRepository, StationRepository
+from app.distribution.repository import DistributionRepository
+
+# Service imports
+from app.bikes.service import BikeService
+from app.stations.service import StationService
+from app.distribution.service import DistributionService
 
 
 # Repository Providers

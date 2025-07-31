@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1.api import api_router
 from app.core.config import settings
-from app.core.exceptions import ResourceNotFound
+from app.shared.exceptions import ResourceNotFound
 
 app = FastAPI(title="molbubi.info", openapi_url="/api/v1/openapi.json", version=settings.VERSION)
 

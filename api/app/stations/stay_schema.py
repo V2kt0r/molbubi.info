@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -14,7 +13,7 @@ class BikeStay(BaseModel):
     start_time: datetime
     
     # The end_time can be None (null) if the stay is currently ongoing.
-    end_time: Optional[datetime] = None
+    end_time: datetime | None = None
 
     class Config:
         # This allows the Pydantic model to be created directly from

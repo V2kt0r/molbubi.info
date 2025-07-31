@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 
-from .endpoints.bikes import router as bikes_router
-from .endpoints.distribution import router as distribution_router
-from .endpoints.stations import router as stations_router
+from app.bikes.endpoints import router as bikes_router
+from app.distribution.endpoints import router as distribution_router
+from app.stations.endpoints import router as stations_router
 
 api_router = APIRouter()
 
