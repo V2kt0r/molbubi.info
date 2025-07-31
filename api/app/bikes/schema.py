@@ -5,8 +5,8 @@ from app.stations.schema import Station
 
 class BikeMovement(BaseModel):
     bike_number: str
-    start_station_uid: int
-    end_station_uid: int
+    start_station: Station
+    end_station: Station
     start_time: datetime
     end_time: datetime
     distance_km: float | None = None

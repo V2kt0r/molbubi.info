@@ -10,7 +10,18 @@ class BikeService:
         self.station_repo = station_repo
 
     def get_bike_history(self, bike_number: str, skip: int, limit: int):
-        return self.bike_repo.get_movements(bike_number, skip, limit)
+        movements_data = self.bike_repo.get_movements(bike_number, skip, limit)
+        return [
+            bike_schemas.BikeMovement(
+                bike_number=movement.bike_number,
+                start_station=start_station,
+                end_station=end_station,
+                start_time=movement.start_time,
+                end_time=movement.end_time,
+                distance_km=movement.distance_km,
+            )
+            for movement, start_station, end_station in movements_data
+        ]
 
     def get_current_location(self, bike_number: str):
         last_movement = self.bike_repo.get_latest_movement(bike_number)

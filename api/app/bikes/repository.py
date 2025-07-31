@@ -1,4 +1,5 @@
 from sqlalchemy import desc, func
+from sqlalchemy.orm import aliased
 
 from app.shared.repository import BaseRepository
 from app.shared import models
@@ -6,8 +7,13 @@ from app.shared import models
 
 class BikeRepository(BaseRepository):
     def get_movements(self, bike_number: str, skip: int = 0, limit: int = 25):
+        start_station = aliased(models.Station)
+        end_station = aliased(models.Station)
+        
         return (
-            self.db.query(models.BikeMovement)
+            self.db.query(models.BikeMovement, start_station, end_station)
+            .join(start_station, models.BikeMovement.start_station_uid == start_station.uid)
+            .join(end_station, models.BikeMovement.end_station_uid == end_station.uid)
             .filter(models.BikeMovement.bike_number == bike_number)
             .order_by(desc(models.BikeMovement.start_time))
             .offset(skip)
