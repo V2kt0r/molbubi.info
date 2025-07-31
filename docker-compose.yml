@@ -28,6 +28,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     ports:
       - "${API_DOCKER_PORT}:8000"
     restart: unless-stopped

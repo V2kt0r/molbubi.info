@@ -19,3 +19,10 @@ class StationStats(StationBase):
     
     class Config:
         from_attributes = True
+
+
+class StationBikeCount(StationBase):
+    bike_count: int
+    
+    class Config:
+        from_attributes = True

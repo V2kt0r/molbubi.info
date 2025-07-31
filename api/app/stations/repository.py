@@ -80,6 +80,23 @@ class BikeStayRepository(BaseRepository):
             (models.BikeStay.end_time == None) | (models.BikeStay.end_time >= timestamp)
         ).all()
 
+    def get_all_station_bike_counts_at_time(self, timestamp) -> dict[int, int]:
+        """
+        Get bike counts for all stations at a specific time from historical data.
+        Returns a dictionary mapping station_uid to bike_count.
+        """
+        # Query to count bikes at each station at the specified time
+        result = self.db.query(
+            models.BikeStay.station_uid,
+            func.count(models.BikeStay.bike_number).label('bike_count')
+        ).filter(
+            models.BikeStay.start_time <= timestamp,
+            (models.BikeStay.end_time == None) | (models.BikeStay.end_time >= timestamp)
+        ).group_by(models.BikeStay.station_uid).all()
+        
+        # Convert to dictionary
+        return {station_uid: bike_count for station_uid, bike_count in result}
+
 
 class RedisRepository:
     def __init__(self, host: str = None, port: int = None):
@@ -94,3 +111,24 @@ class RedisRepository:
         from app.core.config import settings
         station_key = f"{settings.REDIS_STATION_BIKES_SET_PREFIX}:{station_uid}"
         return list(self.client.smembers(station_key))
+
+    def get_all_station_bike_counts(self) -> dict[int, int]:
+        """
+        Get bike counts for all stations from Redis.
+        Returns a dictionary mapping station_uid to bike_count.
+        """
+        from app.core.config import settings
+        pattern = f"{settings.REDIS_STATION_BIKES_SET_PREFIX}:*"
+        station_counts = {}
+        
+        for key in self.client.scan_iter(match=pattern):
+            try:
+                # Extract station_uid from key like "station_bikes:42990796"
+                station_uid = int(key.split(':')[-1])
+                bike_count = self.client.scard(key)
+                station_counts[station_uid] = bike_count
+            except (ValueError, IndexError):
+                # Skip invalid keys
+                continue
+                
+        return station_counts
