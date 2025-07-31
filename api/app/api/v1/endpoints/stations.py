@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from typing import List
 
 from fastapi import APIRouter, Depends, Query
 from fastapi_restful.cbv import cbv
@@ -17,19 +16,27 @@ router = APIRouter()
 class StationCBV:
     service: StationService = Depends(get_station_service)
 
-    @router.get("/", response_model=List[station_schemas.Station])
+    @router.get("/", response_model=list[station_schemas.Station])
     def read_stations(self, skip: int = 0, limit: int = 100):
         return self.service.get_all_stations(skip, limit)
+
+    @router.get("/arrivals", response_model=list[station_schemas.StationStats])
+    def read_stations_arrivals(self, skip: int = 0, limit: int = 100):
+        """
+        Get all stations with their arrival and departure statistics.
+        Returns station information along with total arrivals and departures counts.
+        """
+        return self.service.get_stations_arrivals_and_departures(skip, limit)
 
     @router.get("/{station_uid}", response_model=station_schemas.Station)
     def read_station(self, station_uid: int):
         return self.service.get_station_details(station_uid)
 
-    @router.get("/{station_uid}/bikes", response_model=List[str])
+    @router.get("/{station_uid}/bikes", response_model=list[str])
     def read_bikes_at_station(self, station_uid: int):
         return self.service.get_bikes_at_station(station_uid)
 
-    @router.get("/{station_uid}/history", response_model=List[stay_schema.BikeStay])
+    @router.get("/{station_uid}/history", response_model=list[stay_schema.BikeStay])
     def read_station_history(self, station_uid: int, at_time: datetime = Query(default_factory=lambda: datetime.now(timezone.utc))):
         """
         Get a list of bikes that were at a specific station at a given point in time.

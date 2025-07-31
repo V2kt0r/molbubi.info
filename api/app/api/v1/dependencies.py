@@ -5,10 +5,12 @@ from app.db.database import get_db
 from app.db.repository import (
     BikeRepository,
     BikeStayRepository,
+    DistributionRepository,
     RedisRepository,
     StationRepository,
 )
 from app.services.bike_service import BikeService
+from app.services.distribution_service import DistributionService
 from app.services.station_service import StationService
 
 
@@ -29,6 +31,10 @@ def get_bike_stay_repo(db: Session = Depends(get_db)) -> BikeStayRepository:
     return BikeStayRepository(db)
 
 
+def get_distribution_repo(db: Session = Depends(get_db)) -> DistributionRepository:
+    return DistributionRepository(db)
+
+
 # Service Providers
 def get_station_service(
     station_repo: StationRepository = Depends(get_station_repo),
@@ -43,3 +49,9 @@ def get_bike_service(
     station_repo: StationRepository = Depends(get_station_repo),
 ) -> BikeService:
     return BikeService(bike_repo, station_repo)
+
+
+def get_distribution_service(
+    distribution_repo: DistributionRepository = Depends(get_distribution_repo),
+) -> DistributionService:
+    return DistributionService(distribution_repo)

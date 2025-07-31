@@ -13,6 +13,9 @@ class Station(StationBase):
         from_attributes = True
 
 
-class StationStats(BaseModel):
+class StationStats(StationBase):
     total_arrivals: int
     total_departures: int
+    
+    class Config:
+        from_attributes = True

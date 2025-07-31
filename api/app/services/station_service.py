@@ -2,6 +2,7 @@ from datetime import datetime
 
 from app.core.exceptions import StationNotFound
 from app.db.repository import BikeStayRepository, RedisRepository, StationRepository
+from app.schemas.station import StationStats
 
 
 class StationService:
@@ -34,3 +35,24 @@ class StationService:
         # Return list of bike numbers currently at the station at that time
         return stays
         #return [stay.bike_number for stay in stays]
+
+    def get_stations_arrivals_and_departures(self, skip: int = 0, limit: int = 100) -> list[StationStats]:
+        """
+        Returns a list of StationStats with arrival and departure counts
+        for stations, paginated with skip and limit.
+        """
+        raw_results = self.station_repo.get_arrivals_and_departures(skip=skip, limit=limit)
+        
+        station_stats = []
+        for station, arrival_count, departure_count in raw_results:
+            stats = StationStats(
+                uid=station.uid,
+                name=station.name,
+                lat=station.lat,
+                lng=station.lng,
+                total_arrivals=int(arrival_count),
+                total_departures=int(departure_count)
+            )
+            station_stats.append(stats)
+        
+        return station_stats
