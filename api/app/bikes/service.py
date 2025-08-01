@@ -1,3 +1,4 @@
+from datetime import datetime
 from app.shared.exceptions import BikeNotFound
 from app.bikes.repository import BikeRepository
 from app.stations.repository import StationRepository
@@ -9,8 +10,21 @@ class BikeService:
         self.bike_repo = bike_repo
         self.station_repo = station_repo
 
-    def get_bike_history(self, bike_number: str, skip: int, limit: int):
-        movements_data = self.bike_repo.get_movements(bike_number, skip, limit)
+    def get_bike_history(self, bike_number: str, skip: int, limit: int, days_back: int = 30, start_date: datetime = None, end_date: datetime = None):
+        """
+        Get bike movement history with optional time filtering for better performance.
+        
+        Args:
+            bike_number: The bike to get movements for
+            skip: Number of records to skip (pagination)
+            limit: Maximum number of records to return
+            days_back: Number of days back to look (default 30, ignored if start_date provided)
+            start_date: Explicit start date filter (overrides days_back)
+            end_date: Explicit end date filter (optional)
+        """
+        movements_data = self.bike_repo.get_movements(
+            bike_number, skip, limit, days_back, start_date, end_date
+        )
         return [
             bike_schemas.BikeMovement(
                 bike_number=movement.bike_number,

@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from datetime import datetime
+from typing import Optional
+from fastapi import APIRouter, Depends, Query
 from fastapi_restful.cbv import cbv
 
 from app.bikes import schema as bike_schemas
@@ -19,8 +21,25 @@ class BikeCBV:
     @router.get(
         "/{bike_number}/history", response_model=list[bike_schemas.BikeMovement]
     )
-    def read_bike_history(self, bike_number: str, skip: int = 0, limit: int = 25):
-        return self.service.get_bike_history(bike_number, skip, limit)
+    def read_bike_history(
+        self, 
+        bike_number: str, 
+        skip: int = 0, 
+        limit: int = 25,
+        days_back: int = Query(default=30, description="Number of days back to look for movements (improves performance)"),
+        start_date: Optional[datetime] = Query(default=None, description="Start date filter (ISO format, overrides days_back)"),
+        end_date: Optional[datetime] = Query(default=None, description="End date filter (ISO format)")
+    ):
+        """
+        Get bike movement history with optional time filtering for better performance.
+        
+        - **days_back**: Limits search to recent N days (default: 30)
+        - **start_date**: Explicit start date (overrides days_back if provided)  
+        - **end_date**: Explicit end date filter (optional)
+        
+        Time filtering significantly improves query performance on large datasets.
+        """
+        return self.service.get_bike_history(bike_number, skip, limit, days_back, start_date, end_date)
 
     @router.get("/{bike_number}/location", response_model=bike_schemas.BikeLocation)
     def read_bike_location(self, bike_number: str):
