@@ -1,0 +1,222 @@
+name: Manual Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: 'dev'
+      version:
+        description: 'Version/tag to deploy (e.g., v1.2.3, v1.2.3-alpha.1, main, dev)'
+        required: true
+        type: string
+        default: 'main'
+
+jobs:
+  validate_inputs:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.validate.outputs.environment }}
+      version: ${{ steps.validate.outputs.version }}
+      checkout_ref: ${{ steps.validate.outputs.checkout_ref }}
+    steps:
+      - name: Validate and normalize inputs
+        id: validate
+        run: |
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          VERSION="${{ github.event.inputs.version }}"
+          
+          # Validate environment
+          if [[ ! "$ENVIRONMENT" =~ ^(dev|prod)$ ]]; then
+            echo "Error: Environment must be 'dev' or 'prod'"
+            exit 1
+          fi
+          
+          # Determine checkout reference
+          if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+\.[0-9]+)?$ ]]; then
+            # It's a tag
+            CHECKOUT_REF="$VERSION"
+          elif [[ "$VERSION" =~ ^(main|dev|feature/.+)$ ]]; then
+            # It's a branch
+            CHECKOUT_REF="$VERSION"
+          else
+            # Assume it's a commit hash or other valid git reference
+            CHECKOUT_REF="$VERSION"
+          fi
+          
+          echo "Environment: $ENVIRONMENT"
+          echo "Version: $VERSION"
+          echo "Checkout reference: $CHECKOUT_REF"
+          
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "checkout_ref=$CHECKOUT_REF" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: validate_inputs
+    runs-on: ubuntu-latest
+    environment: ${{ needs.validate_inputs.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate_inputs.outputs.checkout_ref }}
+          fetch-depth: 0  # Fetch full history for proper git operations
+        
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOYER_SSH_KEY }}
+          
+      - name: Add host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ vars.SERVER_ADDRESS }} >> ~/.ssh/known_hosts
+      
+      - name: Get actual commit hash
+        id: commit
+        run: |
+          COMMIT_HASH=$(git rev-parse HEAD)
+          SHORT_HASH=$(git rev-parse --short HEAD)
+          echo "hash=$COMMIT_HASH" >> $GITHUB_OUTPUT
+          echo "short_hash=$SHORT_HASH" >> $GITHUB_OUTPUT
+          echo "Deploying commit: $COMMIT_HASH ($SHORT_HASH)"
+      
+      - name: Create deployment directory
+        run: |
+          DEPLOY_ID="${{ needs.validate_inputs.outputs.version }}-${{ steps.commit.outputs.short_hash }}"
+          echo "Creating deployment directory: $DEPLOY_ID"
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "mkdir -p ~/deployments/${{ needs.validate_inputs.outputs.environment }}/$DEPLOY_ID"
+          echo "DEPLOY_ID=$DEPLOY_ID" >> $GITHUB_ENV
+      
+      - name: Transfer files
+        run: |
+          echo "Transferring files to deployment directory..."
+          rsync -avz --exclude '.git' --exclude '.github' --exclude '*.log' \
+            ./ deployer@${{ vars.SERVER_ADDRESS }}:~/deployments/${{ needs.validate_inputs.outputs.environment }}/$DEPLOY_ID/
+      
+      - name: Create .env file
+        run: |
+          echo "Creating environment configuration..."
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "cat > ~/deployments/${{ needs.validate_inputs.outputs.environment }}/$DEPLOY_ID/.env << 'EOL'
+          API_URL=${{ vars.API_URL }}
+          POLLING_INTERVAL_SECONDS=${{ vars.POLLING_INTERVAL_SECONDS }}
+          REDIS_HOST=${{ vars.REDIS_HOST }}
+          REDIS_DOCKER_PORT=${{ vars.REDIS_DOCKER_PORT }}
+          REDIS_STREAM_NAME=${{ vars.REDIS_STREAM_NAME }}
+          REDIS_CONSUMER_GROUP=${{ vars.REDIS_CONSUMER_GROUP }}
+          REDIS_CONSUMER_NAME=${{ vars.REDIS_CONSUMER_NAME }}
+          REDIS_BIKE_STATE_HASH=${{ vars.REDIS_BIKE_STATE_HASH }}
+          REDIS_STATION_BIKES_SET_PREFIX=${{ vars.REDIS_STATION_BIKES_SET_PREFIX }}
+          REDIS_INSIGHT_DOCKER_PORT=${{ vars.REDIS_INSIGHT_DOCKER_PORT }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=${{ vars.POSTGRES_DB }}
+          POSTGRES_SERVER=${{ vars.POSTGRES_SERVER }}
+          POSTGRES_PORT=${{ vars.POSTGRES_PORT }}
+          PGADMIN_DEFAULT_EMAIL=${{ secrets.PGADMIN_EMAIL }}
+          PGADMIN_DEFAULT_PASSWORD=${{ secrets.PGADMIN_PASSWORD }}
+          API_DOCKER_PORT=${{ vars.API_DOCKER_PORT }}
+          PGADMIN_DOCKER_PORT=${{ vars.PGADMIN_DOCKER_PORT }}
+          VERSION=${{ needs.validate_inputs.outputs.version }}
+          ENVIRONMENT=${{ needs.validate_inputs.outputs.environment }}
+          COMMIT_HASH=${{ steps.commit.outputs.hash }}
+          DEPLOYED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          DEPLOYED_BY=${{ github.actor }}
+          EOL"
+      
+      - name: Ensure Docker volumes exist
+        run: |
+          echo "Ensuring Docker volumes exist..."
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "
+            docker volume create --name ${{ needs.validate_inputs.outputs.environment }}_postgres_data || true
+            docker volume create --name ${{ needs.validate_inputs.outputs.environment }}_pgadmin_data || true
+            docker volume create --name ${{ needs.validate_inputs.outputs.environment }}_redisinsight_data || true
+          "
+
+      - name: Stop previous deployment
+        run: |
+          echo "Stopping previous deployment..."
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "
+            if [ -L ~/deployments/${{ needs.validate_inputs.outputs.environment }}/current ] && [ -d \$(readlink -f ~/deployments/${{ needs.validate_inputs.outputs.environment }}/current) ]; then 
+              echo 'Stopping services in current deployment...'
+              cd \$(readlink -f ~/deployments/${{ needs.validate_inputs.outputs.environment }}/current) && docker compose down --remove-orphans
+            else
+              echo 'No previous deployment found to stop'
+            fi
+          "
+
+      - name: Deploy application
+        run: |
+          echo "Starting new deployment..."
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "
+            cd ~/deployments/${{ needs.validate_inputs.outputs.environment }}/$DEPLOY_ID
+            echo 'Building and starting services...'
+            docker compose up -d --build --remove-orphans
+            echo 'Waiting for services to be ready...'
+            sleep 10
+            docker compose ps
+          "
+      
+      - name: Health check
+        run: |
+          echo "Performing health check..."
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "
+            cd ~/deployments/${{ needs.validate_inputs.outputs.environment }}/$DEPLOY_ID
+            
+            # Check if all services are running
+            if ! docker compose ps --services --filter 'status=running' | grep -q .; then
+              echo 'Error: No services are running'
+              docker compose logs --tail=50
+              exit 1
+            fi
+            
+            # Basic API health check (if API_DOCKER_PORT is available)
+            if [ -n '${{ vars.API_DOCKER_PORT }}' ]; then
+              echo 'Testing API health...'
+              if timeout 30 bash -c 'until curl -f http://localhost:${{ vars.API_DOCKER_PORT }}/ >/dev/null 2>&1; do sleep 2; done'; then
+                echo 'API is responding'
+              else
+                echo 'Warning: API health check failed or timed out'
+              fi
+            fi
+          "
+      
+      - name: Update symlink to current deployment
+        run: |
+          echo "Updating current deployment symlink..."
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "
+            ln -sfn ~/deployments/${{ needs.validate_inputs.outputs.environment }}/$DEPLOY_ID ~/deployments/${{ needs.validate_inputs.outputs.environment }}/current
+            echo 'Current deployment updated to: $DEPLOY_ID'
+          "
+      
+      - name: Clean up old deployments
+        run: |
+          echo "Cleaning up old deployments (keeping last 5)..."
+          ssh deployer@${{ vars.SERVER_ADDRESS }} "
+            cd ~/deployments/${{ needs.validate_inputs.outputs.environment }}
+            # List all directories except 'current', sort by modification time (newest first), skip first 5, remove the rest
+            ls -1t | grep -v 'current' | tail -n +6 | while read deployment; do
+              if [ -d \"\$deployment\" ]; then
+                echo \"Removing old deployment: \$deployment\"
+                rm -rf \"\$deployment\"
+              fi
+            done
+            echo 'Cleanup completed'
+          "
+
+      - name: Deployment summary
+        run: |
+          echo "🚀 Deployment completed successfully!"
+          echo "📋 Deployment Details:"
+          echo "   Environment: ${{ needs.validate_inputs.outputs.environment }}"
+          echo "   Version: ${{ needs.validate_inputs.outputs.version }}"
+          echo "   Commit: ${{ steps.commit.outputs.hash }}"
+          echo "   Deployed by: ${{ github.actor }}"
+          echo "   Deployment ID: $DEPLOY_ID"
