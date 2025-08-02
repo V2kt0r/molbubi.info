@@ -4,16 +4,18 @@ from sqlalchemy.orm import Session
 
 from app.schemas.bike_data import Station as StationSchema
 
-from . import models
+import sys
+sys.path.append('/app')
+from shared_models.models import Station, BikeMovement
 
 
 def upsert_station(db: Session, station: StationSchema):
     """Create or update a station."""
     db_station = (
-        db.query(models.Station).filter(models.Station.uid == station.uid).first()
+        db.query(Station).filter(Station.uid == station.uid).first()
     )
     if not db_station:
-        db_station = models.Station(
+        db_station = Station(
             uid=station.uid, name=station.name, lat=station.lat, lng=station.lng
         )
         db.add(db_station)
@@ -36,7 +38,7 @@ def create_bike_movement(
     distance_km: float,
 ):
     """Create a new bike movement record."""
-    db_movement = models.BikeMovement(
+    db_movement = BikeMovement(
         bike_number=bike_number,
         start_station_uid=start_station_uid,
         end_station_uid=end_station_uid,

@@ -2,7 +2,9 @@ from datetime import date
 from sqlalchemy import func, extract
 
 from app.shared.repository import BaseRepository
-from app.shared import models
+import sys
+sys.path.append('/app')
+from shared_models.models import BikeMovement
 
 
 class DistributionRepository(BaseRepository):
@@ -24,24 +26,24 @@ class DistributionRepository(BaseRepository):
             List of dicts with 'time' (hour 0-23) and 'arrival_count'
         """
         query = self.db.query(
-            extract('hour', models.BikeMovement.end_time).label('hour'),
-            func.count(models.BikeMovement.bike_number).label('arrival_count')
+            extract('hour', BikeMovement.end_time).label('hour'),
+            func.count(BikeMovement.bike_number).label('arrival_count')
         ).filter(
-            models.BikeMovement.end_time.isnot(None),
-            models.BikeMovement.end_station_uid.isnot(None)
+            BikeMovement.end_time.isnot(None),
+            BikeMovement.end_station_uid.isnot(None)
         )
         
         # Apply date range filter
         if start_date:
-            query = query.filter(func.date(models.BikeMovement.end_time) >= start_date)
+            query = query.filter(func.date(BikeMovement.end_time) >= start_date)
         if end_date:
-            query = query.filter(func.date(models.BikeMovement.end_time) <= end_date)
+            query = query.filter(func.date(BikeMovement.end_time) <= end_date)
             
         # Apply station filter
         if station_uids:
-            query = query.filter(models.BikeMovement.end_station_uid.in_(station_uids))
+            query = query.filter(BikeMovement.end_station_uid.in_(station_uids))
             
-        results = query.group_by(extract('hour', models.BikeMovement.end_time)).all()
+        results = query.group_by(extract('hour', BikeMovement.end_time)).all()
         
         # Create a complete 24-hour distribution (fill missing hours with 0)
         hour_counts = {int(hour): count for hour, count in results}
@@ -72,24 +74,24 @@ class DistributionRepository(BaseRepository):
             List of dicts with 'time' (hour 0-23) and 'departure_count'
         """
         query = self.db.query(
-            extract('hour', models.BikeMovement.start_time).label('hour'),
-            func.count(models.BikeMovement.bike_number).label('departure_count')
+            extract('hour', BikeMovement.start_time).label('hour'),
+            func.count(BikeMovement.bike_number).label('departure_count')
         ).filter(
-            models.BikeMovement.start_time.isnot(None),
-            models.BikeMovement.start_station_uid.isnot(None)
+            BikeMovement.start_time.isnot(None),
+            BikeMovement.start_station_uid.isnot(None)
         )
         
         # Apply date range filter
         if start_date:
-            query = query.filter(func.date(models.BikeMovement.start_time) >= start_date)
+            query = query.filter(func.date(BikeMovement.start_time) >= start_date)
         if end_date:
-            query = query.filter(func.date(models.BikeMovement.start_time) <= end_date)
+            query = query.filter(func.date(BikeMovement.start_time) <= end_date)
             
         # Apply station filter
         if station_uids:
-            query = query.filter(models.BikeMovement.start_station_uid.in_(station_uids))
+            query = query.filter(BikeMovement.start_station_uid.in_(station_uids))
             
-        results = query.group_by(extract('hour', models.BikeMovement.start_time)).all()
+        results = query.group_by(extract('hour', BikeMovement.start_time)).all()
         
         # Create a complete 24-hour distribution (fill missing hours with 0)
         hour_counts = {int(hour): count for hour, count in results}

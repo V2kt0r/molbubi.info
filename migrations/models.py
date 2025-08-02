@@ -1,11 +1,12 @@
 from sqlalchemy import (
     Column,
-    Integer,
-    String,
-    Float,
     DateTime,
+    Float,
     ForeignKey,
+    Index,
+    Integer,
     PrimaryKeyConstraint,
+    String,
 )
 from sqlalchemy.orm import declarative_base
 
@@ -23,20 +24,38 @@ class Station(Base):
 class BikeMovement(Base):
     __tablename__ = "bike_movements"
 
-    # Define columns without a single primary key here
-    bike_number = Column(String, index=True, nullable=False)
-    start_time = Column(
-        DateTime(timezone=True), nullable=False
-    )  # This is the partitioning column
+    bike_number = Column(String, nullable=False)  # Removed individual index, using composite
+    start_time = Column(DateTime(timezone=True), nullable=False)
 
     end_time = Column(DateTime(timezone=True), nullable=False)
     start_station_uid = Column(Integer, ForeignKey("stations.uid"))
     end_station_uid = Column(Integer, ForeignKey("stations.uid"))
     distance_km = Column(Float)
 
-    # Define a composite primary key that includes the partitioning column
     __table_args__ = (
         PrimaryKeyConstraint("bike_number", "start_time"),
+        # Optimized composite indexes for query performance
+        Index(
+            "idx_bike_movements_bike_time_covering",
+            "bike_number", 
+            start_time.desc(),
+            postgresql_include=["end_time", "start_station_uid", "end_station_uid", "distance_km"]
+        ),
+        Index(
+            "idx_bike_movements_bike_endtime",
+            "bike_number",
+            end_time.desc()
+        ),
+        Index(
+            "idx_bike_movements_start_station_stats",
+            "start_station_uid",
+            postgresql_include=["bike_number"]
+        ),
+        Index(
+            "idx_bike_movements_end_station_stats", 
+            "end_station_uid",
+            postgresql_include=["bike_number"]
+        ),
         {},
     )
 

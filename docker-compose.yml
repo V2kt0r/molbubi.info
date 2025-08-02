@@ -1,11 +1,26 @@
 services:
+  # Database migrations service - runs once on startup
+  migrations:
+    build:
+      context: .
+      dockerfile: ./migrations/Dockerfile
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"  # Run once and exit
+
   # The data collector service
   collector:
     build: ./collector
     env_file:
       - .env
     depends_on:
-      - redis
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
     restart: unless-stopped
 
   # The data processor service
@@ -13,9 +28,11 @@ services:
     build: ./processor
     env_file:
       - .env
+    volumes:
+      - ./migrations:/app/shared_models:ro  # Mount migrations models as read-only
     depends_on:
-      db:
-        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
       redis:
         condition: service_started
     restart: unless-stopped
@@ -25,9 +42,11 @@ services:
     build: ./api
     env_file:
       - .env
+    volumes:
+      - ./migrations:/app/shared_models:ro  # Mount migrations models as read-only
     depends_on:
-      db:
-        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
       redis:
         condition: service_started
     ports:
