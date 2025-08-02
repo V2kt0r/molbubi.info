@@ -4,8 +4,6 @@ from sqlalchemy.orm import Session
 
 from app.schemas.bike_data import Station as StationSchema
 
-import sys
-sys.path.append('/app')
 from shared_models.models import Station, BikeMovement
 
 

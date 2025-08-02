@@ -7,8 +7,6 @@ from app.core.config import settings
 from app.schemas.bike_data import BikeState
 from app.schemas.bike_data import Station as StationSchema
 
-import sys
-sys.path.append('/app')
 from shared_models.models import Base, Station, BikeMovement, BikeStay
 
 

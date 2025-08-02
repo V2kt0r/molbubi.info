@@ -1,8 +1,6 @@
 from sqlalchemy import desc, func
 
 from app.shared.repository import BaseRepository
-import sys
-sys.path.append('/app')
 from shared_models.models import Station, BikeMovement, BikeStay
 
 

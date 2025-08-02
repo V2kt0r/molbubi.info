@@ -2,8 +2,6 @@ from datetime import date
 from sqlalchemy import func, extract
 
 from app.shared.repository import BaseRepository
-import sys
-sys.path.append('/app')
 from shared_models.models import BikeMovement
 
 

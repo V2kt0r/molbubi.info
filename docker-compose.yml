@@ -28,6 +28,8 @@ services:
     build: ./processor
     env_file:
       - .env
+    environment:
+      - PYTHONPATH=/app
     volumes:
       - ./migrations:/app/shared_models:ro  # Mount migrations models as read-only
     depends_on:
@@ -42,6 +44,8 @@ services:
     build: ./api
     env_file:
       - .env
+    environment:
+      - PYTHONPATH=/app
     volumes:
       - ./migrations:/app/shared_models:ro  # Mount migrations models as read-only
     depends_on:

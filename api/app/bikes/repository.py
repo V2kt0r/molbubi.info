@@ -3,8 +3,6 @@ from sqlalchemy import desc, func
 from sqlalchemy.orm import aliased
 
 from app.shared.repository import BaseRepository
-import sys
-sys.path.append('/app')
 from shared_models.models import BikeMovement, Station
 
 
@@ -100,15 +98,15 @@ class BikeRepository(BaseRepository):
                 summary_sq.c.bike_number,
                 summary_sq.c.total_trips,
                 summary_sq.c.total_distance_km,
-                models.Station,
+                Station,
             )
             .join(
                 latest_movement_sq,
                 latest_movement_sq.c.bike_number == summary_sq.c.bike_number,
             )
             .join(
-                models.Station,
-                models.Station.uid == latest_movement_sq.c.end_station_uid,
+                Station,
+                Station.uid == latest_movement_sq.c.end_station_uid,
             )
             .order_by(desc(summary_sq.c.total_distance_km))
             .offset(skip)
