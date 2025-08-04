@@ -3,6 +3,7 @@ from app.shared.exceptions import BikeNotFound
 from app.bikes.repository import BikeRepository
 from app.stations.repository import StationRepository
 from app.bikes import schema as bike_schemas
+from app.shared.schemas import PaginatedResponse, create_pagination_meta
 
 
 class BikeService:
@@ -10,7 +11,7 @@ class BikeService:
         self.bike_repo = bike_repo
         self.station_repo = station_repo
 
-    def get_bike_history(self, bike_number: str, skip: int, limit: int, days_back: int = 30, start_date: datetime = None, end_date: datetime = None):
+    def get_bike_history(self, bike_number: str, skip: int, limit: int, days_back: int = 30, start_date: datetime = None, end_date: datetime = None) -> PaginatedResponse[bike_schemas.BikeMovement]:
         """
         Get bike movement history with optional time filtering for better performance.
         
@@ -25,7 +26,9 @@ class BikeService:
         movements_data = self.bike_repo.get_movements(
             bike_number, skip, limit, days_back, start_date, end_date
         )
-        return [
+        total_count = self.bike_repo.count_movements(bike_number, days_back, start_date, end_date)
+        
+        movements = [
             bike_schemas.BikeMovement(
                 bike_number=movement.bike_number,
                 start_station=start_station,
@@ -36,6 +39,9 @@ class BikeService:
             )
             for movement, start_station, end_station in movements_data
         ]
+        
+        meta = create_pagination_meta(skip, limit, total_count)
+        return PaginatedResponse(data=movements, meta=meta)
 
     def get_current_location(self, bike_number: str):
         last_movement = self.bike_repo.get_latest_movement(bike_number)
@@ -49,9 +55,11 @@ class BikeService:
             last_seen=last_movement.end_time,
         )
 
-    def get_all_bikes_summary(self, skip: int, limit: int):
+    def get_all_bikes_summary(self, skip: int, limit: int) -> PaginatedResponse[bike_schemas.BikeSummary]:
         summaries = self.bike_repo.get_all_summary(skip, limit)
-        return [
+        total_count = self.bike_repo.count_all_summary()
+        
+        bikes = [
             bike_schemas.BikeSummary(
                 bike_number=bike_number,
                 total_trips=total_trips,
@@ -62,3 +70,6 @@ class BikeService:
             )
             for bike_number, total_trips, total_distance_km, station in summaries
         ]
+        
+        meta = create_pagination_meta(skip, limit, total_count)
+        return PaginatedResponse(data=bikes, meta=meta)

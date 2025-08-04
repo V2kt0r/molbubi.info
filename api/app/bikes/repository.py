@@ -113,3 +113,23 @@ class BikeRepository(BaseRepository):
             .limit(limit)
             .all()
         )
+    
+    def count_movements(self, bike_number: str, days_back: int = 30, start_date: datetime = None, end_date: datetime = None) -> int:
+        """Count movements for a bike with same filtering as get_movements"""
+        query = self.db.query(BikeMovement).filter(BikeMovement.bike_number == bike_number)
+        
+        # Apply same time filtering as get_movements
+        if start_date is not None:
+            query = query.filter(BikeMovement.start_time >= start_date)
+        elif days_back is not None:
+            cutoff_date = datetime.utcnow() - timedelta(days=days_back)
+            query = query.filter(BikeMovement.start_time >= cutoff_date)
+            
+        if end_date is not None:
+            query = query.filter(BikeMovement.start_time <= end_date)
+            
+        return query.count()
+        
+    def count_all_summary(self) -> int:
+        """Count distinct bikes for summary pagination"""
+        return self.db.query(BikeMovement.bike_number).distinct().count()

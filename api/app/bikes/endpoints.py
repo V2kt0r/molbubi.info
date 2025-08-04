@@ -6,6 +6,7 @@ from fastapi_restful.cbv import cbv
 from app.bikes import schema as bike_schemas
 from app.bikes.service import BikeService
 from app.shared.dependencies import get_bike_service
+from app.shared.schemas import PaginatedResponse
 
 router = APIRouter()
 
@@ -14,12 +15,12 @@ router = APIRouter()
 class BikeCBV:
     service: BikeService = Depends(get_bike_service)
 
-    @router.get("/", response_model=list[bike_schemas.BikeSummary])
+    @router.get("/", response_model=PaginatedResponse[bike_schemas.BikeSummary])
     def read_all_bikes_summary(self, skip: int = 0, limit: int = 100):
         return self.service.get_all_bikes_summary(skip, limit)
 
     @router.get(
-        "/{bike_number}/history", response_model=list[bike_schemas.BikeMovement]
+        "/{bike_number}/history", response_model=PaginatedResponse[bike_schemas.BikeMovement]
     )
     def read_bike_history(
         self, 

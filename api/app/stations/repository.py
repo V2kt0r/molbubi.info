@@ -14,6 +14,9 @@ class StationRepository(BaseRepository):
 
     def get_all(self, skip: int = 0, limit: int = 100):
         return self.db.query(Station).offset(skip).limit(limit).all()
+    
+    def count_all(self) -> int:
+        return self.db.query(Station).count()
 
     def get_arrivals_and_departures(self, skip: int = 0, limit: int = 100) -> list[tuple]:
         """
@@ -67,6 +70,10 @@ class StationRepository(BaseRepository):
         )
 
         return query.all()
+        
+    def count_arrivals_and_departures(self) -> int:
+        """Count all stations for arrivals and departures pagination"""
+        return self.db.query(Station).count()
 
 
 class BikeStayRepository(BaseRepository):
