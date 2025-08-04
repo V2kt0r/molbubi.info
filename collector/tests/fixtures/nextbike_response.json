@@ -1,0 +1,174 @@
+{
+  "countries": [
+    {
+      "country": "Hungary",
+      "country_calling_code": "+36",
+      "currency": "HUF",
+      "domain": "hu",
+      "hotline": "06-1-325-3333",
+      "lat": 47.162494,
+      "lng": 19.503304,
+      "name": "Hungary",
+      "country_name": "Hungary",
+      "cities": [
+        {
+          "uid": 699,
+          "lat": 47.497912,
+          "lng": 19.040235,
+          "zoom": 12,
+          "name": "Budapest",
+          "alias": "budapest",
+          "break": false,
+          "places": [
+            {
+              "uid": 42990604,
+              "lat": 47.515002,
+              "lng": 19.039806,
+              "name": "0201-Margit híd - Buda",
+              "spot": false,
+              "number": 201,
+              "booked_bikes": 0,
+              "bikes": 5,
+              "bike_numbers": [
+                "860001",
+                "860002",
+                "860003",
+                "860004",
+                "860005"
+              ],
+              "bike_list": [
+                {
+                  "number": "860001",
+                  "bike_type": 0,
+                  "lock_types": ["fork_lock"],
+                  "active": true,
+                  "state": "ok",
+                  "electric_lock": false,
+                  "boardcomputer": 0,
+                  "pedelec_battery": null,
+                  "battery_pack": null
+                },
+                {
+                  "number": "860002",
+                  "bike_type": 0,
+                  "lock_types": ["fork_lock"],
+                  "active": true,
+                  "state": "ok",
+                  "electric_lock": false,
+                  "boardcomputer": 0,
+                  "pedelec_battery": null,
+                  "battery_pack": null
+                },
+                {
+                  "number": "860003",
+                  "bike_type": 0,
+                  "lock_types": ["fork_lock"],
+                  "active": true,
+                  "state": "ok",
+                  "electric_lock": false,
+                  "boardcomputer": 0,
+                  "pedelec_battery": null,
+                  "battery_pack": null
+                },
+                {
+                  "number": "860004",
+                  "bike_type": 0,
+                  "lock_types": ["fork_lock"],
+                  "active": true,
+                  "state": "ok",
+                  "electric_lock": false,
+                  "boardcomputer": 0,
+                  "pedelec_battery": null,
+                  "battery_pack": null
+                },
+                {
+                  "number": "860005",
+                  "bike_type": 0,
+                  "lock_types": ["fork_lock"],
+                  "active": true,
+                  "state": "ok",
+                  "electric_lock": false,
+                  "boardcomputer": 0,
+                  "pedelec_battery": null,
+                  "battery_pack": null
+                }
+              ],
+              "terminal_type": "3g",
+              "bike_types": {
+                "0": 5
+              },
+              "free_racks": 13,
+              "racks": 18,
+              "maintenance": false,
+              "plantext": "0201-Margit híd - Buda"
+            },
+            {
+              "uid": 42990665,
+              "lat": 47.496338,
+              "lng": 19.070423,
+              "name": "0809-Blaha Lujza tér M",
+              "spot": true,
+              "number": 809,
+              "booked_bikes": 2,
+              "bikes": 0,
+              "bike_numbers": [],
+              "bike_list": [],
+              "terminal_type": "3g",
+              "bike_types": {},
+              "free_racks": 18,
+              "racks": 18,
+              "maintenance": false,
+              "plantext": "0809-Blaha Lujza tér M"
+            },
+            {
+              "uid": 42990802,
+              "lat": 47.530329,
+              "lng": 19.080443,
+              "name": "1320-Béke tér",
+              "spot": false,
+              "number": 1320,
+              "booked_bikes": 0,
+              "bikes": 12,
+              "bike_numbers": [
+                "860101",
+                "860102",
+                "860103",
+                "860104",
+                "860105",
+                "860106",
+                "860107",
+                "860108",
+                "860109",
+                "860110",
+                "860111",
+                "860112"
+              ],
+              "bike_list": [
+                {"number": "860101"},
+                {"number": "860102"},
+                {"number": "860103"},
+                {"number": "860104"},
+                {"number": "860105"},
+                {"number": "860106"},
+                {"number": "860107"},
+                {"number": "860108"},
+                {"number": "860109"},
+                {"number": "860110"},
+                {"number": "860111"},
+                {"number": "860112"}
+              ],
+              "terminal_type": "3g",
+              "bike_types": {
+                "0": 12
+              },
+              "free_racks": 6,
+              "racks": 18,
+              "maintenance": false,
+              "plantext": "1320-Béke tér"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
