@@ -1,0 +1,314 @@
+name: Manual Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Which service(s) to test'
+        required: true
+        type: choice
+        options:
+          - collector
+          - api
+          - processor
+          - migrations
+          - all
+        default: 'collector'
+      coverage:
+        description: 'Generate coverage reports'
+        required: false
+        type: boolean
+        default: true
+      upload_artifacts:
+        description: 'Upload test results and coverage as artifacts'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  # Test the collector service (currently the only service with tests)
+  test-collector:
+    if: ${{ github.event.inputs.service == 'collector' || github.event.inputs.service == 'all' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/pypoetry
+            collector/.venv
+          key: ${{ runner.os }}-poetry-collector-${{ hashFiles('collector/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-collector-
+            
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          
+      - name: Install collector dependencies
+        working-directory: ./collector
+        run: |
+          poetry install --with test
+          
+      - name: Run collector tests
+        working-directory: ./collector
+        env:
+          # Set required environment variables for tests
+          API_URL: "https://test-api.example.com"
+          POLLING_INTERVAL_SECONDS: "10"
+          REDIS_HOST: "localhost"
+          REDIS_DOCKER_PORT: "6379"
+          REDIS_STREAM_NAME: "test_stream"
+        run: |
+          if [ "${{ github.event.inputs.coverage }}" == "true" ]; then
+            poetry run pytest --cov=app --cov-report=term --cov-report=xml --cov-report=html --cov-fail-under=90 -v
+          else
+            poetry run pytest -v
+          fi
+          
+      - name: Upload collector test results
+        if: ${{ github.event.inputs.upload_artifacts == 'true' && always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: collector-test-results-py${{ matrix.python-version }}
+          path: |
+            collector/htmlcov/
+            collector/coverage.xml
+            collector/.coverage
+          retention-days: 30
+          
+      - name: Upload collector coverage to Codecov (optional)
+        if: ${{ github.event.inputs.coverage == 'true' }}
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./collector/coverage.xml
+          flags: collector
+          name: collector-coverage
+          fail_ci_if_error: false
+
+  # Placeholder for API service tests (uncomment when tests are added)
+  test-api:
+    if: ${{ (github.event.inputs.service == 'api' || github.event.inputs.service == 'all') && false }}  # Set to true when API tests exist
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]  # API uses Python 3.12
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/pypoetry
+            api/.venv
+          key: ${{ runner.os }}-poetry-api-${{ hashFiles('api/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-api-
+            
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          
+      - name: Install API dependencies
+        working-directory: ./api
+        run: |
+          poetry install --with test  # Will need to add test dependencies
+          
+      - name: Run API tests
+        working-directory: ./api
+        run: |
+          if [ "${{ github.event.inputs.coverage }}" == "true" ]; then
+            poetry run pytest --cov=app --cov-report=term --cov-report=xml --cov-report=html -v
+          else
+            poetry run pytest -v
+          fi
+          
+      - name: Upload API test results
+        if: ${{ github.event.inputs.upload_artifacts == 'true' && always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: api-test-results-py${{ matrix.python-version }}
+          path: |
+            api/htmlcov/
+            api/coverage.xml
+            api/.coverage
+          retention-days: 30
+
+  # Placeholder for Processor service tests (uncomment when tests are added)
+  test-processor:
+    if: ${{ (github.event.inputs.service == 'processor' || github.event.inputs.service == 'all') && false }}  # Set to true when processor tests exist
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]  # Processor uses Python 3.11
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/pypoetry
+            processor/.venv
+          key: ${{ runner.os }}-poetry-processor-${{ hashFiles('processor/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-processor-
+            
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          
+      - name: Install processor dependencies
+        working-directory: ./processor
+        run: |
+          poetry install --with test  # Will need to add test dependencies
+          
+      - name: Run processor tests
+        working-directory: ./processor
+        run: |
+          if [ "${{ github.event.inputs.coverage }}" == "true" ]; then
+            poetry run pytest --cov=app --cov-report=term --cov-report=xml --cov-report=html -v
+          else
+            poetry run pytest -v
+          fi
+          
+      - name: Upload processor test results
+        if: ${{ github.event.inputs.upload_artifacts == 'true' && always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: processor-test-results-py${{ matrix.python-version }}
+          path: |
+            processor/htmlcov/
+            processor/coverage.xml
+            processor/.coverage
+          retention-days: 30
+
+  # Placeholder for Migrations tests (uncomment when tests are added)
+  test-migrations:
+    if: ${{ (github.event.inputs.service == 'migrations' || github.event.inputs.service == 'all') && false }}  # Set to true when migration tests exist
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]  # Migrations use Python 3.12
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/pypoetry
+            migrations/.venv
+          key: ${{ runner.os }}-poetry-migrations-${{ hashFiles('migrations/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-migrations-
+            
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          
+      - name: Install migrations dependencies
+        working-directory: ./migrations
+        run: |
+          poetry install --with test  # Will need to add test dependencies
+          
+      - name: Run migration tests
+        working-directory: ./migrations
+        run: |
+          if [ "${{ github.event.inputs.coverage }}" == "true" ]; then
+            poetry run pytest --cov=. --cov-report=term --cov-report=xml --cov-report=html -v
+          else
+            poetry run pytest -v
+          fi
+          
+      - name: Upload migrations test results
+        if: ${{ github.event.inputs.upload_artifacts == 'true' && always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: migrations-test-results-py${{ matrix.python-version }}
+          path: |
+            migrations/htmlcov/
+            migrations/coverage.xml
+            migrations/.coverage
+          retention-days: 30
+
+  # Summary job that runs after all tests complete
+  test-summary:
+    if: always()
+    needs: [test-collector]  # Add other jobs here when they're enabled: test-api, test-processor, test-migrations
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Test Results Summary
+        run: |
+          echo "🧪 Test Execution Summary"
+          echo "========================="
+          echo "Service: ${{ github.event.inputs.service }}"
+          echo "Coverage: ${{ github.event.inputs.coverage }}"
+          echo "Upload Artifacts: ${{ github.event.inputs.upload_artifacts }}"
+          echo ""
+          echo "Job Results:"
+          
+          # Check collector results
+          if [ "${{ needs.test-collector.result }}" != "" ]; then
+            echo "- Collector: ${{ needs.test-collector.result }}"
+          fi
+          
+          # Future: Add other service results here when enabled
+          # echo "- API: ${{ needs.test-api.result }}"
+          # echo "- Processor: ${{ needs.test-processor.result }}"
+          # echo "- Migrations: ${{ needs.test-migrations.result }}"
+          
+          echo ""
+          if [ "${{ contains(needs.*.result, 'failure') }}" == "true" ]; then
+            echo "❌ Some tests failed! Check the job logs for details."
+            exit 1
+          else
+            echo "✅ All tests passed successfully!"
+          fi
