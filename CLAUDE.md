@@ -91,22 +91,39 @@ poetry export -f requirements.txt --output requirements.txt --without-hashes
 
 ### Collector Development (collector/)
 ```bash
-# Install dependencies
+# Install dependencies with Poetry
 cd collector/
-pip install -r requirements.txt
+poetry install
 
 # Run collector locally
-python -m app.main
+poetry run python -m app.main
 ```
 
 ### Processor Development (processor/)
 ```bash
-# Install dependencies
+# Install dependencies with Poetry
 cd processor/
-pip install -r requirements.txt
+poetry install
 
 # Run processor locally
-python -m app.main
+poetry run python -m app.main
+```
+
+### Migrations Development (migrations/)
+```bash
+# Install dependencies with Poetry
+cd migrations/
+poetry install
+
+# Run migrations locally
+poetry run python run_migrations.py
+
+# Create new migration
+poetry run alembic revision --autogenerate -m "description"
+
+# Check migration status
+poetry run alembic current
+poetry run alembic history
 ```
 
 ## Key Configuration

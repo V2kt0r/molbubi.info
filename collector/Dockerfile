@@ -1,10 +1,18 @@
 FROM python:3.11-slim
 
+# Install poetry
+RUN pip install poetry
+
+# Configure poetry: don't create a virtual environment
+RUN poetry config virtualenvs.create false
+
 WORKDIR /code
 
-COPY requirements.txt .
+# Copy poetry files
+COPY pyproject.toml poetry.lock* ./
 
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies
+RUN poetry install --only=main --no-root
 
 COPY ./app ./app
 

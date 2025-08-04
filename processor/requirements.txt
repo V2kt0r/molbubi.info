@@ -1,5 +1,0 @@
-redis
-pydantic
-pydantic-settings
-SQLAlchemy
-psycopg2-binary
