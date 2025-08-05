@@ -57,6 +57,17 @@ services:
       - "${API_DOCKER_PORT}:8000"
     restart: unless-stopped
 
+  # The frontend service
+  frontend:
+    build: ./frontend
+    env_file:
+      - .env
+    depends_on:
+      - api
+    ports:
+      - "${FRONTEND_DOCKER_PORT}:3000"
+    restart: unless-stopped
+
   pgadmin:
     image: dpage/pgadmin4
     env_file:
