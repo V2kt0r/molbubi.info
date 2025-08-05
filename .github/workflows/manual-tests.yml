@@ -24,6 +24,14 @@ on:
         required: false
         type: boolean
         default: true
+      test_method:
+        description: 'Test execution method'
+        required: false
+        type: choice
+        options:
+          - poetry
+          - docker
+        default: 'poetry'
 
 jobs:
   # Test the collector service (currently the only service with tests)
@@ -101,9 +109,9 @@ jobs:
           name: collector-coverage
           fail_ci_if_error: false
 
-  # Placeholder for API service tests (uncomment when tests are added)
+  # Test the API service
   test-api:
-    if: ${{ (github.event.inputs.service == 'api' || github.event.inputs.service == 'all') && false }}  # Set to true when API tests exist
+    if: ${{ github.event.inputs.service == 'api' || github.event.inputs.service == 'all' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -138,15 +146,44 @@ jobs:
       - name: Install API dependencies
         working-directory: ./api
         run: |
-          poetry install --with test  # Will need to add test dependencies
+          poetry install
           
-      - name: Run API tests
+      - name: Run API tests (Poetry)
+        if: ${{ github.event.inputs.test_method == 'poetry' }}
         working-directory: ./api
+        env:
+          # Set required environment variables for tests
+          DATABASE_URL: "sqlite:///test.db"
+          REDIS_URL: "redis://localhost:6379/0"
+          VERSION: "test"
         run: |
           if [ "${{ github.event.inputs.coverage }}" == "true" ]; then
-            poetry run pytest --cov=app --cov-report=term --cov-report=xml --cov-report=html -v
+            poetry run pytest --cov=app --cov-report=term --cov-report=xml --cov-report=html --cov-fail-under=85 -v
           else
             poetry run pytest -v
+          fi
+
+      - name: Run API tests (Docker)
+        if: ${{ github.event.inputs.test_method == 'docker' }}
+        working-directory: .
+        run: |
+          # Create .env file for docker-compose
+          echo "DATABASE_URL=postgresql://test:test@db:5432/test" > .env
+          echo "POSTGRES_USER=test" >> .env
+          echo "POSTGRES_PASSWORD=test" >> .env
+          echo "POSTGRES_DB=test" >> .env
+          echo "REDIS_URL=redis://redis:6379/0" >> .env
+          echo "VERSION=test" >> .env
+          echo "ENVIRONMENT=test" >> .env
+          echo "API_DOCKER_PORT=8000" >> .env
+          echo "PGADMIN_DOCKER_PORT=5050" >> .env
+          echo "REDIS_INSIGHT_DOCKER_PORT=8001" >> .env
+          
+          # Install test dependencies and run tests in Docker
+          if [ "${{ github.event.inputs.coverage }}" == "true" ]; then
+            docker compose run --rm api bash -c "pip install pytest pytest-asyncio pytest-cov httpx pytest-mock fakeredis && pytest tests/ --cov=app --cov-report=term --cov-report=xml --cov-report=html --cov-fail-under=85 -v"
+          else
+            docker compose run --rm api bash -c "pip install pytest pytest-asyncio pytest-cov httpx pytest-mock fakeredis && pytest tests/ -v"
           fi
           
       - name: Upload API test results
@@ -160,9 +197,9 @@ jobs:
             api/.coverage
           retention-days: 30
 
-  # Placeholder for Processor service tests (uncomment when tests are added)
+  # Test the processor service
   test-processor:
-    if: ${{ (github.event.inputs.service == 'processor' || github.event.inputs.service == 'all') && false }}  # Set to true when processor tests exist
+    if: ${{ github.event.inputs.service == 'processor' || github.event.inputs.service == 'all' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -281,7 +318,7 @@ jobs:
   # Summary job that runs after all tests complete
   test-summary:
     if: always()
-    needs: [test-collector]  # Add other jobs here when they're enabled: test-api, test-processor, test-migrations
+    needs: [test-collector, test-api, test-processor]  # Add other jobs here when they're enabled: test-migrations
     runs-on: ubuntu-latest
     
     steps:
@@ -300,9 +337,17 @@ jobs:
             echo "- Collector: ${{ needs.test-collector.result }}"
           fi
           
+          # Check API results
+          if [ "${{ needs.test-api.result }}" != "" ]; then
+            echo "- API: ${{ needs.test-api.result }}"
+          fi
+          
+          # Check processor results
+          if [ "${{ needs.test-processor.result }}" != "" ]; then
+            echo "- Processor: ${{ needs.test-processor.result }}"
+          fi
+          
           # Future: Add other service results here when enabled
-          # echo "- API: ${{ needs.test-api.result }}"
-          # echo "- Processor: ${{ needs.test-processor.result }}"
           # echo "- Migrations: ${{ needs.test-migrations.result }}"
           
           echo ""

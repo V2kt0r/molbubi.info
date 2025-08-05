@@ -1,0 +1,368 @@
+"""
+Comprehensive tests for main entry point covering all edge cases.
+"""
+import pytest
+from unittest.mock import MagicMock, patch
+import redis
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.main import main
+
+
+class TestMain:
+    """Test cases for main function and entry point."""
+
+    @patch('app.main.DataConsumer')
+    @patch('app.main.redis.Redis')
+    @patch('app.main.init_db')
+    def test_main_function_success(self, mock_init_db, mock_redis_class, mock_consumer_class, caplog_info):
+        """Test successful execution of main function."""
+        # Setup mocks
+        mock_redis_client = MagicMock()
+        mock_redis_class.return_value = mock_redis_client
+        
+        mock_consumer = MagicMock()
+        mock_consumer_class.return_value = mock_consumer
+        
+        # Call main function
+        main()
+        
+        # Verify logging
+        assert "Starting Data Processor service..." in caplog_info.text
+        
+        # Verify database initialization was called
+        mock_init_db.assert_called_once()
+        
+        # Verify Redis client was created with correct parameters
+        from app.core.config import settings
+        mock_redis_class.assert_called_once_with(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_DOCKER_PORT,
+            decode_responses=True
+        )
+        
+        # Verify consumer was created and started
+        mock_consumer_class.assert_called_once_with(mock_redis_client)
+        mock_consumer.run.assert_called_once()
+
+    @patch('app.main.DataConsumer')
+    @patch('app.main.redis.Redis')
+    @patch('app.main.init_db')
+    def test_main_function_db_init_failure(self, mock_init_db, mock_redis_class, mock_consumer_class):
+        """Test main function when database initialization fails."""
+        # Make database initialization fail
+        mock_init_db.side_effect = SQLAlchemyError("Database connection failed")
+        
+        # Should propagate the database error
+        with pytest.raises(SQLAlchemyError, match="Database connection failed"):
+            main()
+        
+        # Redis client and consumer should not be created
+        mock_redis_class.assert_not_called()
+        mock_consumer_class.assert_not_called()
+
+    @patch('app.main.DataConsumer')
+    @patch('app.main.redis.Redis')
+    @patch('app.main.init_db')
+    def test_main_function_redis_connection_failure(self, mock_init_db, mock_redis_class, mock_consumer_class):
+        """Test main function when Redis connection fails."""
+        # Database init succeeds
+        mock_init_db.return_value = None
+        
+        # Redis connection fails
+        mock_redis_class.side_effect = redis.ConnectionError("Redis connection failed")
+        
+        # Should propagate the Redis error
+        with pytest.raises(redis.ConnectionError, match="Redis connection failed"):
+            main()
+        
+        # Database should be initialized before Redis failure
+        mock_init_db.assert_called_once()
+        
+        # Consumer should not be created
+        mock_consumer_class.assert_not_called()
+
+    @patch('app.main.DataConsumer')
+    @patch('app.main.redis.Redis')
+    @patch('app.main.init_db')
+    def test_main_function_consumer_creation_failure(self, mock_init_db, mock_redis_class, mock_consumer_class):
+        """Test main function when consumer creation fails."""
+        # Database and Redis succeed
+        mock_init_db.return_value = None
+        mock_redis_client = MagicMock()
+        mock_redis_class.return_value = mock_redis_client
+        
+        # Consumer creation fails
+        mock_consumer_class.side_effect = Exception("Consumer creation failed")
+        
+        # Should propagate the consumer creation error
+        with pytest.raises(Exception, match="Consumer creation failed"):
+            main()
+        
+        # Database and Redis should be initialized
+        mock_init_db.assert_called_once()
+        mock_redis_class.assert_called_once()
+
+    @patch('app.main.DataConsumer')
+    @patch('app.main.redis.Redis')
+    @patch('app.main.init_db')
+    def test_main_function_consumer_run_failure(self, mock_init_db, mock_redis_class, mock_consumer_class):
+        """Test main function when consumer run fails."""
+        # Database, Redis, and consumer creation succeed
+        mock_init_db.return_value = None
+        mock_redis_client = MagicMock()
+        mock_redis_class.return_value = mock_redis_client
+        
+        mock_consumer = MagicMock()
+        mock_consumer.run.side_effect = Exception("Consumer run failed")
+        mock_consumer_class.return_value = mock_consumer
+        
+        # Should propagate the consumer run error
+        with pytest.raises(Exception, match="Consumer run failed"):
+            main()
+        
+        # All setup should have succeeded
+        mock_init_db.assert_called_once()
+        mock_redis_class.assert_called_once()
+        mock_consumer_class.assert_called_once_with(mock_redis_client)
+
+    @patch('app.main.DataConsumer')
+    @patch('app.main.redis.Redis')
+    @patch('app.main.init_db')
+    def test_main_function_with_custom_settings(self, mock_init_db, mock_redis_class, mock_consumer_class):
+        """Test main function with custom settings values."""
+        # Mock custom settings
+        with patch('app.main.settings') as mock_settings:
+            mock_settings.REDIS_HOST = "custom-redis-host"
+            mock_settings.REDIS_DOCKER_PORT = 6380
+            
+            mock_init_db.return_value = None
+            mock_redis_client = MagicMock()
+            mock_redis_class.return_value = mock_redis_client
+            mock_consumer = MagicMock()
+            mock_consumer_class.return_value = mock_consumer
+            
+            main()
+            
+            # Verify Redis client was created with custom settings
+            mock_redis_class.assert_called_once_with(
+                host="custom-redis-host",
+                port=6380,
+                decode_responses=True
+            )
+
+    @patch('app.main.DataConsumer')
+    @patch('app.main.redis.Redis')
+    @patch('app.main.init_db')
+    def test_main_function_logging_setup(self, mock_init_db, mock_redis_class, mock_consumer_class, caplog):
+        """Test that main function uses correct logging setup."""
+        # Setup successful mocks
+        mock_init_db.return_value = None
+        mock_redis_client = MagicMock()
+        mock_redis_class.return_value = mock_redis_client
+        mock_consumer = MagicMock()
+        mock_consumer_class.return_value = mock_consumer
+        
+        main()
+        
+        # Check that the logger is properly configured at module level
+        from app import main as main_module
+        assert hasattr(main_module, 'logger')
+        assert main_module.logger.name == 'app.main'
+        
+        # Check that startup message was logged
+        info_logs = [record for record in caplog.records if record.levelname == 'INFO']
+        assert any("Starting Data Processor service..." in log.message for log in info_logs)
+
+    @patch('app.main.DataConsumer')
+    @patch('app.main.redis.Redis')
+    @patch('app.main.init_db')
+    def test_main_function_execution_order(self, mock_init_db, mock_redis_class, mock_consumer_class):
+        """Test that main function executes steps in correct order."""
+        call_order = []
+        
+        def track_init_db():
+            call_order.append('init_db')
+        
+        def track_redis(*args, **kwargs):
+            call_order.append('redis')
+            return MagicMock()
+        
+        def track_consumer(redis_client):
+            call_order.append('consumer')
+            mock_consumer = MagicMock()
+            mock_consumer.run = lambda: call_order.append('run')
+            return mock_consumer
+        
+        mock_init_db.side_effect = track_init_db
+        mock_redis_class.side_effect = track_redis
+        mock_consumer_class.side_effect = track_consumer
+        
+        main()
+        
+        # Verify correct execution order
+        expected_order = ['init_db', 'redis', 'consumer', 'run']
+        assert call_order == expected_order
+
+    @patch('app.main.DataConsumer')
+    @patch('app.main.redis.Redis')
+    @patch('app.main.init_db')
+    def test_main_function_redis_parameters(self, mock_init_db, mock_redis_class, mock_consumer_class):
+        """Test that Redis client is created with correct parameters."""
+        mock_init_db.return_value = None
+        mock_redis_client = MagicMock()
+        mock_redis_class.return_value = mock_redis_client
+        mock_consumer = MagicMock()
+        mock_consumer_class.return_value = mock_consumer
+        
+        main()
+        
+        # Verify Redis parameters
+        call_args = mock_redis_class.call_args
+        assert call_args[1]['decode_responses'] is True  # Should always be True
+        
+        # Verify host and port come from settings
+        from app.core.config import settings
+        assert call_args[1]['host'] == settings.REDIS_HOST
+        assert call_args[1]['port'] == settings.REDIS_DOCKER_PORT
+
+    def test_main_module_imports(self):
+        """Test that all required modules can be imported."""
+        # This test ensures all imports in main.py are valid
+        try:
+            from app.main import main, logging, redis
+            from app.core.config import settings
+            from app.db.database import init_db  
+            from app.services.consumer import DataConsumer
+        except ImportError as e:
+            pytest.fail(f"Import error in main module: {e}")
+
+    def test_main_module_logger_configuration(self):
+        """Test that logger is properly configured at module level."""
+        from app import main
+        
+        # Verify logger exists and is configured
+        assert hasattr(main, 'logger')
+        assert main.logger.name == 'app.main'
+
+    @patch('app.main.DataConsumer')
+    @patch('app.main.redis.Redis')
+    @patch('app.main.init_db')
+    def test_main_function_keyboard_interrupt(self, mock_init_db, mock_redis_class, mock_consumer_class):
+        """Test main function handling of KeyboardInterrupt."""
+        # Setup mocks to succeed until consumer.run()
+        mock_init_db.return_value = None
+        mock_redis_client = MagicMock()
+        mock_redis_class.return_value = mock_redis_client
+        
+        mock_consumer = MagicMock()
+        mock_consumer.run.side_effect = KeyboardInterrupt("User interrupt")
+        mock_consumer_class.return_value = mock_consumer
+        
+        # KeyboardInterrupt should propagate (this is expected behavior)
+        with pytest.raises(KeyboardInterrupt):
+            main()
+        
+        # All setup should have completed successfully
+        mock_init_db.assert_called_once()
+        mock_redis_class.assert_called_once()
+        mock_consumer_class.assert_called_once()
+        mock_consumer.run.assert_called_once()
+
+    @patch('app.main.DataConsumer')
+    @patch('app.main.redis.Redis')
+    @patch('app.main.init_db')
+    def test_main_function_multiple_calls(self, mock_init_db, mock_redis_class, mock_consumer_class):
+        """Test multiple calls to main function."""
+        # Setup successful mocks
+        mock_init_db.return_value = None
+        mock_redis_client = MagicMock()
+        mock_redis_class.return_value = mock_redis_client
+        mock_consumer = MagicMock()
+        mock_consumer_class.return_value = mock_consumer
+        
+        # Call main twice
+        main()
+        main()
+        
+        # Each call should perform all operations
+        assert mock_init_db.call_count == 2
+        assert mock_redis_class.call_count == 2
+        assert mock_consumer_class.call_count == 2
+        assert mock_consumer.run.call_count == 2
+
+    def test_main_entry_point_execution(self):
+        """Test the __name__ == '__main__' entry point."""
+        # Test that the main block would call main() function
+        with patch('app.main.main') as mock_main_func:
+            # Simulate running the module as main
+            exec_code = """
+if __name__ == "__main__":
+    main()
+"""
+            # Create a namespace that includes our mocked main function
+            namespace = {'__name__': '__main__', 'main': mock_main_func}
+            
+            exec(exec_code, namespace)
+            
+            # Verify main function would be called
+            mock_main_func.assert_called_once()
+
+    @patch('app.main.DataConsumer')
+    @patch('app.main.redis.Redis')
+    @patch('app.main.init_db')
+    def test_main_function_with_settings_attributes(self, mock_init_db, mock_redis_class, mock_consumer_class):
+        """Test that main function accesses correct settings attributes."""
+        # Verify that the main function uses the expected settings attributes
+        mock_init_db.return_value = None
+        mock_redis_client = MagicMock()
+        mock_redis_class.return_value = mock_redis_client
+        mock_consumer = MagicMock()
+        mock_consumer_class.return_value = mock_consumer
+        
+        # Import settings to verify attributes exist
+        from app.core.config import settings
+        
+        # These attributes should exist and be used by main()
+        assert hasattr(settings, 'REDIS_HOST')
+        assert hasattr(settings, 'REDIS_DOCKER_PORT')
+        
+        main()
+        
+        # Verify the attributes were actually used
+        mock_redis_class.assert_called_once_with(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_DOCKER_PORT,
+            decode_responses=True
+        )
+
+    @patch('app.main.DataConsumer')
+    @patch('app.main.redis.Redis')
+    @patch('app.main.init_db')
+    def test_main_function_exception_propagation(self, mock_init_db, mock_redis_class, mock_consumer_class):
+        """Test that exceptions are properly propagated from main function."""
+        # Test various exception types
+        test_exceptions = [
+            SQLAlchemyError("Database error"),
+            redis.ConnectionError("Redis error"),
+            redis.RedisError("Redis general error"),
+            Exception("General error"),
+            RuntimeError("Runtime error"),
+            ValueError("Value error")
+        ]
+        
+        for exception in test_exceptions:
+            # Reset mocks
+            mock_init_db.reset_mock()
+            mock_redis_class.reset_mock()
+            mock_consumer_class.reset_mock()
+            
+            # Make init_db fail with current exception
+            mock_init_db.side_effect = exception
+            
+            # Verify exception is propagated
+            with pytest.raises(type(exception)):
+                main()
+            
+            # Reset side_effect for next iteration
+            mock_init_db.side_effect = None

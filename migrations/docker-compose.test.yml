@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  migrations-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    environment:
+      # Test environment variables
+      - POSTGRES_USER=test_user
+      - POSTGRES_PASSWORD=test_password
+      - POSTGRES_SERVER=test_server
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=test_db
+    volumes:
+      # Mount test results out to host
+      - ./htmlcov:/app/htmlcov
+      - ./.pytest_cache:/app/.pytest_cache
+    command: >
+      sh -c "
+        echo '🚀 Starting migrations test suite...' &&
+        python -m pytest tests/ --cov=. --cov-report=term-missing --cov-report=html:htmlcov --cov-fail-under=75 --tb=short -v &&
+        echo '✅ Tests completed successfully!'
+      "

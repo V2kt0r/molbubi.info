@@ -1,0 +1,544 @@
+"""
+Comprehensive tests for ProcessingService covering all edge cases including movement detection logic.
+"""
+import math
+import time
+import pytest
+from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
+
+from app.services.processing import ProcessingService
+from app.schemas.bike_data import ApiResponse, Country, City, Station, Bike, BikeState
+
+
+class TestProcessingService:
+    """Test cases for ProcessingService class."""
+
+    def test_processing_service_initialization(self, test_db_session):
+        """Test ProcessingService initialization."""
+        mock_redis_repo = MagicMock()
+        
+        with patch('app.services.processing.StationRepository') as mock_station_repo, \
+             patch('app.services.processing.BikeMovementRepository') as mock_movement_repo, \
+             patch('app.services.processing.BikeStayRepository') as mock_stay_repo:
+            
+            service = ProcessingService(test_db_session, mock_redis_repo)
+            
+            assert service.redis_repo == mock_redis_repo
+            mock_station_repo.assert_called_once_with(test_db_session)
+            mock_movement_repo.assert_called_once_with(test_db_session)
+            mock_stay_repo.assert_called_once_with(test_db_session)
+
+    def test_process_snapshot_empty_response(self, test_db_session):
+        """Test processing empty API response."""
+        mock_redis_repo = MagicMock()
+        empty_response = ApiResponse(countries=[])
+        
+        with patch('app.services.processing.StationRepository'), \
+             patch('app.services.processing.BikeMovementRepository'), \
+             patch('app.services.processing.BikeStayRepository'):
+            
+            service = ProcessingService(test_db_session, mock_redis_repo)
+            service.process_snapshot(empty_response)
+            
+            # No stations should be processed
+            mock_redis_repo.update_station_occupancy.assert_not_called()
+
+    def test_process_snapshot_non_spot_stations_ignored(self, test_db_session):
+        """Test that non-spot stations are ignored."""
+        mock_redis_repo = MagicMock()
+        
+        # Create response with non-spot station
+        non_spot_station = Station(
+            uid=1001,
+            lat=47.5,
+            lng=19.0,
+            name="Non-Spot Station",
+            spot=False,  # This should be ignored
+            bike_list=[Bike(number="BIKE123")]
+        )
+        response = ApiResponse(countries=[
+            Country(cities=[City(places=[non_spot_station])])
+        ])
+        
+        with patch('app.services.processing.StationRepository') as mock_station_repo, \
+             patch('app.services.processing.BikeMovementRepository'), \
+             patch('app.services.processing.BikeStayRepository'):
+            
+            service = ProcessingService(test_db_session, mock_redis_repo)
+            service.process_snapshot(response)
+            
+            # Non-spot station should not be processed
+            mock_station_repo.return_value.upsert.assert_not_called()
+            mock_redis_repo.update_station_occupancy.assert_not_called()
+
+    def test_process_snapshot_single_station_no_bikes(self, test_db_session):
+        """Test processing single station with no bikes."""
+        mock_redis_repo = MagicMock()
+        
+        empty_station = Station(
+            uid=1001,
+            lat=47.5,
+            lng=19.0,
+            name="Empty Station",
+            spot=True,
+            bike_list=[]
+        )
+        response = ApiResponse(countries=[
+            Country(cities=[City(places=[empty_station])])
+        ])
+        
+        with patch('app.services.processing.StationRepository') as mock_station_repo, \
+             patch('app.services.processing.BikeMovementRepository'), \
+             patch('app.services.processing.BikeStayRepository'):
+            
+            service = ProcessingService(test_db_session, mock_redis_repo)
+            service.process_snapshot(response)
+            
+            # Station should be upserted
+            mock_station_repo.return_value.upsert.assert_called_once_with(empty_station)
+            
+            # Station occupancy should be updated with empty set
+            mock_redis_repo.update_station_occupancy.assert_called_once_with(1001, set())
+
+    def test_process_snapshot_single_station_with_bikes(self, test_db_session):
+        """Test processing single station with bikes."""
+        mock_redis_repo = MagicMock()
+        mock_redis_repo.get_bike_state.return_value = None  # No previous state
+        
+        station_with_bikes = Station(
+            uid=1001,
+            lat=47.5,
+            lng=19.0,
+            name="Station with Bikes",
+            spot=True,
+            bike_list=[Bike(number="BIKE123"), Bike(number="BIKE456")]
+        )
+        response = ApiResponse(countries=[
+            Country(cities=[City(places=[station_with_bikes])])
+        ])
+        
+        with patch('app.services.processing.StationRepository') as mock_station_repo, \
+             patch('app.services.processing.BikeMovementRepository'), \
+             patch('app.services.processing.BikeStayRepository') as mock_stay_repo, \
+             patch('app.services.processing.ProcessingService._detect_and_record_movement') as mock_detect:
+            
+            service = ProcessingService(test_db_session, mock_redis_repo)
+            
+            with patch('time.time', return_value=1640995200.0):
+                service.process_snapshot(response)
+            
+            # Station should be upserted
+            mock_station_repo.return_value.upsert.assert_called_once_with(station_with_bikes)
+            
+            # Station occupancy should be updated
+            expected_bikes = {"BIKE123", "BIKE456"}
+            mock_redis_repo.update_station_occupancy.assert_called_once_with(1001, expected_bikes)
+            
+            # Movement detection should be called for each bike
+            assert mock_detect.call_count == 2
+            mock_detect.assert_any_call("BIKE123", 1001, 1640995200.0)
+            mock_detect.assert_any_call("BIKE456", 1001, 1640995200.0)
+
+    def test_process_snapshot_multiple_countries_cities_stations(self, test_db_session):
+        """Test processing complex nested structure with multiple countries, cities, and stations."""
+        mock_redis_repo = MagicMock()
+        mock_redis_repo.get_bike_state.return_value = None
+        
+        # Create complex nested structure
+        stations_country1_city1 = [
+            Station(uid=1001, lat=47.1, lng=19.1, name="Station 1-1-1", spot=True, bike_list=[Bike(number="BIKE111")]),
+            Station(uid=1002, lat=47.2, lng=19.2, name="Station 1-1-2", spot=True, bike_list=[Bike(number="BIKE112")])
+        ]
+        stations_country1_city2 = [
+            Station(uid=1003, lat=47.3, lng=19.3, name="Station 1-2-1", spot=True, bike_list=[])
+        ]
+        stations_country2_city1 = [
+            Station(uid=2001, lat=48.1, lng=20.1, name="Station 2-1-1", spot=True, bike_list=[Bike(number="BIKE211")])
+        ]
+        
+        response = ApiResponse(countries=[
+            Country(cities=[
+                City(places=stations_country1_city1),
+                City(places=stations_country1_city2)
+            ]),
+            Country(cities=[
+                City(places=stations_country2_city1)
+            ])
+        ])
+        
+        with patch('app.services.processing.StationRepository') as mock_station_repo, \
+             patch('app.services.processing.BikeMovementRepository'), \
+             patch('app.services.processing.BikeStayRepository'), \
+             patch('app.services.processing.ProcessingService._detect_and_record_movement') as mock_detect:
+            
+            service = ProcessingService(test_db_session, mock_redis_repo)
+            service.process_snapshot(response)
+            
+            # All 4 stations should be upserted
+            assert mock_station_repo.return_value.upsert.call_count == 4
+            
+            # All 4 stations should have occupancy updated
+            assert mock_redis_repo.update_station_occupancy.call_count == 4
+            
+            # Movement detection should be called for bikes: BIKE111, BIKE112, BIKE211
+            assert mock_detect.call_count == 3
+
+    def test_detect_and_record_movement_new_bike(self, test_db_session):
+        """Test movement detection for a bike seen for the first time."""
+        mock_redis_repo = MagicMock()
+        mock_redis_repo.get_bike_state.return_value = None  # No previous state
+        
+        with patch('app.services.processing.StationRepository') as mock_station_repo, \
+             patch('app.services.processing.BikeMovementRepository'), \
+             patch('app.services.processing.BikeStayRepository') as mock_stay_repo:
+            
+            service = ProcessingService(test_db_session, mock_redis_repo)
+            
+            current_time = 1640995200.0
+            service._detect_and_record_movement("BIKE123", 1001, current_time)
+            
+            # New stay should be created
+            expected_stay_data = {
+                "bike_number": "BIKE123",
+                "station_uid": 1001,
+                "start_time": datetime.fromtimestamp(current_time, tz=timezone.utc)
+            }
+            mock_stay_repo.return_value.create_stay.assert_called_once_with(expected_stay_data)
+            
+            # No movement should be created for new bike
+            assert not hasattr(service.movement_repo, 'create') or not service.movement_repo.create.called
+            
+            # Bike state should be updated
+            expected_state = {
+                "station_uid": 1001,
+                "timestamp": current_time,
+                "stay_start_time": current_time
+            }
+            mock_redis_repo.set_bike_state.assert_called_with("BIKE123", expected_state)
+
+    def test_detect_and_record_movement_bike_stays_same_station(self, test_db_session):
+        """Test movement detection when bike stays at the same station."""
+        previous_state = BikeState(
+            station_uid=1001,
+            timestamp=1640991600.0,  # 1 hour ago
+            stay_start_time=1640988000.0  # 2 hours ago
+        )
+        
+        mock_redis_repo = MagicMock()
+        mock_redis_repo.get_bike_state.return_value = previous_state
+        
+        with patch('app.services.processing.StationRepository') as mock_station_repo, \
+             patch('app.services.processing.BikeMovementRepository') as mock_movement_repo, \
+             patch('app.services.processing.BikeStayRepository') as mock_stay_repo:
+            
+            # Mock that no active stay exists
+            mock_stay_repo.return_value.find_active_stay.return_value = None
+            
+            service = ProcessingService(test_db_session, mock_redis_repo)
+            
+            current_time = 1640995200.0
+            service._detect_and_record_movement("BIKE123", 1001, current_time)
+            
+            # No new stay should be created (bike didn't move)
+            mock_stay_repo.return_value.create_stay.assert_not_called()
+            mock_stay_repo.return_value.end_stay.assert_not_called()
+            
+            # No movement should be created
+            mock_movement_repo.return_value.create.assert_not_called()
+            
+            # Bike state should be updated with original stay start time
+            expected_state = {
+                "station_uid": 1001,
+                "timestamp": current_time,
+                "stay_start_time": 1640988000.0  # Original stay start time
+            }
+            mock_redis_repo.set_bike_state.assert_called_with("BIKE123", expected_state)
+
+    def test_detect_and_record_movement_bike_moves_stations(self, test_db_session, caplog_info):
+        """Test movement detection when bike moves between stations."""
+        previous_state = BikeState(
+            station_uid=1001,
+            timestamp=1640991600.0,  # 1 hour ago
+            stay_start_time=1640988000.0
+        )
+        
+        mock_redis_repo = MagicMock()
+        mock_redis_repo.get_bike_state.return_value = previous_state
+        
+        # Mock stations for distance calculation
+        mock_start_station = MagicMock()
+        mock_start_station.lat = 47.5
+        mock_start_station.lng = 19.0
+        
+        mock_end_station = MagicMock()
+        mock_end_station.lat = 47.6
+        mock_end_station.lng = 19.1
+        
+        with patch('app.services.processing.StationRepository') as mock_station_repo, \
+             patch('app.services.processing.BikeMovementRepository') as mock_movement_repo, \
+             patch('app.services.processing.BikeStayRepository') as mock_stay_repo:
+            
+            # Mock active stay
+            mock_active_stay = MagicMock()
+            mock_stay_repo.return_value.find_active_stay.return_value = mock_active_stay
+            
+            # Mock station retrieval
+            mock_station_repo.return_value.get_by_uid.side_effect = [mock_start_station, mock_end_station]
+            
+            service = ProcessingService(test_db_session, mock_redis_repo)
+            
+            current_time = 1640995200.0
+            service._detect_and_record_movement("BIKE123", 1002, current_time)
+            
+            # Movement should be detected and logged
+            assert "Movement detected for bike BIKE123: 1001 -> 1002" in caplog_info.text
+            
+            # Active stay should be ended
+            expected_end_time = datetime.fromtimestamp(previous_state.timestamp, tz=timezone.utc)
+            mock_stay_repo.return_value.end_stay.assert_called_once_with(mock_active_stay, expected_end_time)
+            
+            # New stay should be created
+            expected_stay_data = {
+                "bike_number": "BIKE123",
+                "station_uid": 1002,
+                "start_time": datetime.fromtimestamp(current_time, tz=timezone.utc)
+            }
+            mock_stay_repo.return_value.create_stay.assert_called_once_with(expected_stay_data)
+            
+            # Movement should be created
+            expected_movement_data = {
+                "bike_number": "BIKE123",
+                "start_station_uid": 1001,
+                "end_station_uid": 1002,
+                "start_time": datetime.fromtimestamp(previous_state.timestamp, tz=timezone.utc),
+                "end_time": datetime.fromtimestamp(current_time, tz=timezone.utc),
+                "distance_km": pytest.approx(13.152, rel=1e-3)  # Calculated haversine distance
+            }
+            mock_movement_repo.return_value.create.assert_called_once_with(expected_movement_data)
+            
+            # Bike state should be updated
+            expected_state = {
+                "station_uid": 1002,
+                "timestamp": current_time,
+                "stay_start_time": current_time
+            }
+            mock_redis_repo.set_bike_state.assert_called_with("BIKE123", expected_state)
+
+    def test_detect_and_record_movement_missing_stations(self, test_db_session):
+        """Test movement detection when start or end station is missing."""
+        previous_state = BikeState(
+            station_uid=1001,
+            timestamp=1640991600.0
+        )
+        
+        mock_redis_repo = MagicMock()
+        mock_redis_repo.get_bike_state.return_value = previous_state
+        
+        with patch('app.services.processing.StationRepository') as mock_station_repo, \
+             patch('app.services.processing.BikeMovementRepository') as mock_movement_repo, \
+             patch('app.services.processing.BikeStayRepository') as mock_stay_repo:
+            
+            mock_stay_repo.return_value.find_active_stay.return_value = None
+            
+            # Mock missing stations (return None)
+            mock_station_repo.return_value.get_by_uid.return_value = None
+            
+            service = ProcessingService(test_db_session, mock_redis_repo)
+            
+            current_time = 1640995200.0
+            service._detect_and_record_movement("BIKE123", 1002, current_time)
+            
+            # Movement should be created with zero distance
+            expected_movement_data = {
+                "bike_number": "BIKE123",
+                "start_station_uid": 1001,
+                "end_station_uid": 1002,
+                "start_time": datetime.fromtimestamp(previous_state.timestamp, tz=timezone.utc),
+                "end_time": datetime.fromtimestamp(current_time, tz=timezone.utc),
+                "distance_km": 0.0
+            }
+            mock_movement_repo.return_value.create.assert_called_once_with(expected_movement_data)
+
+    def test_detect_and_record_movement_partial_missing_stations(self, test_db_session):
+        """Test movement detection when only one station is missing."""
+        previous_state = BikeState(
+            station_uid=1001,
+            timestamp=1640991600.0
+        )
+        
+        mock_redis_repo = MagicMock()
+        mock_redis_repo.get_bike_state.return_value = previous_state
+        
+        mock_start_station = MagicMock()
+        mock_start_station.lat = 47.5
+        mock_start_station.lng = 19.0
+        
+        with patch('app.services.processing.StationRepository') as mock_station_repo, \
+             patch('app.services.processing.BikeMovementRepository') as mock_movement_repo, \
+             patch('app.services.processing.BikeStayRepository') as mock_stay_repo:
+            
+            mock_stay_repo.return_value.find_active_stay.return_value = None
+            
+            # Mock start station exists, end station missing
+            mock_station_repo.return_value.get_by_uid.side_effect = [mock_start_station, None]
+            
+            service = ProcessingService(test_db_session, mock_redis_repo)
+            
+            current_time = 1640995200.0
+            service._detect_and_record_movement("BIKE123", 1002, current_time)
+            
+            # Movement should be created with zero distance
+            expected_movement_data = {
+                "bike_number": "BIKE123",
+                "start_station_uid": 1001,
+                "end_station_uid": 1002,
+                "start_time": datetime.fromtimestamp(previous_state.timestamp, tz=timezone.utc),
+                "end_time": datetime.fromtimestamp(current_time, tz=timezone.utc),
+                "distance_km": 0.0
+            }
+            mock_movement_repo.return_value.create.assert_called_once_with(expected_movement_data)
+
+    def test_haversine_distance_calculation(self, test_db_session):
+        """Test haversine distance calculation with known coordinates."""
+        # Test with known coordinates: Budapest to Vienna (approximately 214 km)
+        budapest_lat, budapest_lng = 47.4979, 19.0402
+        vienna_lat, vienna_lng = 48.2082, 16.3738
+        
+        distance = ProcessingService._haversine_distance(
+            budapest_lat, budapest_lng, vienna_lat, vienna_lng
+        )
+        
+        # Should be approximately 214 km
+        assert pytest.approx(distance, abs=5) == 214
+
+    def test_haversine_distance_same_location(self, test_db_session):
+        """Test haversine distance for same location."""
+        lat, lng = 47.5, 19.0
+        
+        distance = ProcessingService._haversine_distance(lat, lng, lat, lng)
+        
+        assert distance == 0.0
+
+    def test_haversine_distance_close_locations(self, test_db_session):
+        """Test haversine distance for very close locations."""
+        lat1, lng1 = 47.50000, 19.00000
+        lat2, lng2 = 47.50001, 19.00001  # Very small difference
+        
+        distance = ProcessingService._haversine_distance(lat1, lng1, lat2, lng2)
+        
+        # Should be a very small distance (less than 1 meter = 0.001 km)
+        assert distance < 0.001
+
+    def test_haversine_distance_antipodal_points(self, test_db_session):
+        """Test haversine distance for antipodal points (opposite sides of Earth)."""
+        # Points on opposite sides of Earth
+        lat1, lng1 = 0, 0  # Equator, Prime Meridian
+        lat2, lng2 = 0, 180  # Equator, opposite side
+        
+        distance = ProcessingService._haversine_distance(lat1, lng1, lat2, lng2)
+        
+        # Should be approximately half the Earth's circumference (~20,015 km)
+        assert pytest.approx(distance, abs=100) == 20015
+
+    def test_haversine_distance_negative_coordinates(self, test_db_session):
+        """Test haversine distance with negative coordinates."""
+        # South America to Africa
+        lat1, lng1 = -23.5505, -46.6333  # São Paulo
+        lat2, lng2 = -33.9249, 18.4241   # Cape Town
+        
+        distance = ProcessingService._haversine_distance(lat1, lng1, lat2, lng2)
+        
+        # Should be approximately 6,800 km
+        assert pytest.approx(distance, abs=100) == 6800
+
+    def test_processing_service_with_bike_state_none_stay_start_time(self, test_db_session):
+        """Test movement detection when previous state has None stay_start_time."""
+        previous_state = BikeState(
+            station_uid=1001,
+            timestamp=1640991600.0,
+            stay_start_time=None  # No stay start time
+        )
+        
+        mock_redis_repo = MagicMock()
+        mock_redis_repo.get_bike_state.return_value = previous_state
+        
+        with patch('app.services.processing.StationRepository'), \
+             patch('app.services.processing.BikeMovementRepository'), \
+             patch('app.services.processing.BikeStayRepository') as mock_stay_repo:
+            
+            mock_stay_repo.return_value.find_active_stay.return_value = None
+            
+            service = ProcessingService(test_db_session, mock_redis_repo)
+            
+            current_time = 1640995200.0
+            service._detect_and_record_movement("BIKE123", 1001, current_time)
+            
+            # Should use timestamp as stay start time
+            expected_state = {
+                "station_uid": 1001,
+                "timestamp": current_time,
+                "stay_start_time": 1640991600.0  # Should use previous timestamp
+            }
+            mock_redis_repo.set_bike_state.assert_called_with("BIKE123", expected_state)
+
+    def test_processing_service_error_handling(self, test_db_session):
+        """Test error handling in processing service."""
+        mock_redis_repo = MagicMock()
+        mock_redis_repo.get_bike_state.side_effect = Exception("Redis error")
+        
+        station_with_bikes = Station(
+            uid=1001,
+            lat=47.5,
+            lng=19.0,
+            name="Test Station",
+            spot=True,
+            bike_list=[Bike(number="BIKE123")]
+        )
+        response = ApiResponse(countries=[
+            Country(cities=[City(places=[station_with_bikes])])
+        ])
+        
+        with patch('app.services.processing.StationRepository') as mock_station_repo, \
+             patch('app.services.processing.BikeMovementRepository'), \
+             patch('app.services.processing.BikeStayRepository'):
+            
+            service = ProcessingService(test_db_session, mock_redis_repo)
+            
+            # Should raise the Redis error
+            with pytest.raises(Exception, match="Redis error"):
+                service.process_snapshot(response)
+
+    def test_processing_service_massive_bike_list(self, test_db_session):
+        """Test processing station with massive number of bikes."""
+        mock_redis_repo = MagicMock()
+        mock_redis_repo.get_bike_state.return_value = None
+        
+        # Create station with 1000 bikes
+        massive_bike_list = [Bike(number=f"BIKE{i:04d}") for i in range(1000)]
+        massive_station = Station(
+            uid=1001,
+            lat=47.5,
+            lng=19.0,
+            name="Massive Station",
+            spot=True,
+            bike_list=massive_bike_list
+        )
+        response = ApiResponse(countries=[
+            Country(cities=[City(places=[massive_station])])
+        ])
+        
+        with patch('app.services.processing.StationRepository') as mock_station_repo, \
+             patch('app.services.processing.BikeMovementRepository'), \
+             patch('app.services.processing.BikeStayRepository'), \
+             patch('app.services.processing.ProcessingService._detect_and_record_movement') as mock_detect:
+            
+            service = ProcessingService(test_db_session, mock_redis_repo)
+            service.process_snapshot(response)
+            
+            # Should process all 1000 bikes
+            assert mock_detect.call_count == 1000
+            
+            # Station occupancy should include all 1000 bikes
+            expected_bikes = {f"BIKE{i:04d}" for i in range(1000)}
+            mock_redis_repo.update_station_occupancy.assert_called_once_with(1001, expected_bikes)

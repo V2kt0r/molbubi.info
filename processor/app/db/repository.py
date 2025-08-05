@@ -57,7 +57,14 @@ class RedisRepository:
 
     def get_bike_state(self, bike_number: str) -> BikeState | None:
         state_json = self.client.hget(self.bike_state_hash, bike_number)
-        return BikeState.model_validate_json(state_json) if state_json else None
+        if not state_json:
+            return None
+        
+        try:
+            return BikeState.model_validate_json(state_json)
+        except Exception:
+            # Handle invalid JSON or validation errors gracefully
+            return None
 
     def set_bike_state(self, bike_number: str, state_data: dict):
         state = BikeState(**state_data)

@@ -1,0 +1,27 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies including poetry
+RUN apt-get update && apt-get install -y \
+    gcc \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install poetry
+
+# Copy processor code
+COPY . /app/
+
+# Copy the shared_models we created
+COPY shared_models /app/shared_models
+
+# Configure poetry to not create virtual environment
+RUN poetry config virtualenvs.create false
+
+# Install Python dependencies
+RUN poetry install --with test
+
+# Set environment variables
+ENV PYTHONPATH=/app
+
+CMD ["pytest", "tests/", "--cov=app", "--cov-report=term", "-v"]

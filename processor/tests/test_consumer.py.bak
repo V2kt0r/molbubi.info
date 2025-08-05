@@ -1,0 +1,568 @@
+"""
+Comprehensive tests for DataConsumer service covering all edge cases.
+"""
+import json
+import time
+import pytest
+from unittest.mock import MagicMock, patch, call
+import redis
+from pydantic import ValidationError
+
+from app.services.consumer import DataConsumer
+from app.schemas.bike_data import ApiResponse
+
+
+class TestDataConsumer:
+    """Test cases for DataConsumer class."""
+
+    def test_consumer_initialization(self, redis_client, mock_settings):
+        """Test DataConsumer initialization."""
+        with patch.object(DataConsumer, '_ensure_consumer_group') as mock_ensure:
+            consumer = DataConsumer(redis_client)
+            
+            assert consumer.redis_client == redis_client
+            assert consumer.stream_name == mock_settings.REDIS_STREAM_NAME
+            assert consumer.group_name == mock_settings.REDIS_CONSUMER_GROUP
+            assert consumer.consumer_name == mock_settings.REDIS_CONSUMER_NAME
+            mock_ensure.assert_called_once()
+
+    def test_ensure_consumer_group_creates_new_group(self, redis_client, caplog_info):
+        """Test creating a new consumer group."""
+        with patch.object(DataConsumer, '_ensure_consumer_group'):
+            consumer = DataConsumer(redis_client)
+        
+        # Manually test the method
+        redis_client.xgroup_create = MagicMock()
+        consumer._ensure_consumer_group()
+        
+        redis_client.xgroup_create.assert_called_once_with(
+            name=consumer.stream_name,
+            groupname=consumer.group_name,
+            id="0",
+            mkstream=True
+        )
+
+    def test_ensure_consumer_group_already_exists(self, redis_client, caplog_info):
+        """Test when consumer group already exists."""
+        with patch.object(DataConsumer, '_ensure_consumer_group'):
+            consumer = DataConsumer(redis_client)
+        
+        # Mock BUSYGROUP error
+        redis_client.xgroup_create = MagicMock(
+            side_effect=redis.ResponseError("BUSYGROUP Consumer Group name already exists")
+        )
+        
+        # Should not raise exception
+        consumer._ensure_consumer_group()
+        
+        assert "already exists" in caplog_info.text
+
+    def test_ensure_consumer_group_other_redis_error(self, redis_client):
+        """Test consumer group creation with other Redis error."""
+        with patch.object(DataConsumer, '_ensure_consumer_group'):
+            consumer = DataConsumer(redis_client)
+        
+        # Mock other Redis error
+        redis_client.xgroup_create = MagicMock(
+            side_effect=redis.ResponseError("Other Redis error")
+        )
+        
+        with pytest.raises(redis.ResponseError, match="Other Redis error"):
+            consumer._ensure_consumer_group()
+
+    def test_ensure_consumer_group_connection_error(self, redis_client):
+        """Test consumer group creation with connection error."""
+        with patch.object(DataConsumer, '_ensure_consumer_group'):
+            consumer = DataConsumer(redis_client)
+        
+        # Mock connection error
+        redis_client.xgroup_create = MagicMock(
+            side_effect=redis.ConnectionError("Connection failed")
+        )
+        
+        with pytest.raises(redis.ConnectionError):
+            consumer._ensure_consumer_group()
+
+    @patch('app.services.consumer.time.sleep')
+    def test_run_with_no_messages(self, mock_sleep, redis_client, caplog_info):
+        """Test run method with no messages (empty stream)."""
+        with patch.object(DataConsumer, '_ensure_consumer_group'):
+            consumer = DataConsumer(redis_client)
+        
+        # Mock xreadgroup to return empty messages a few times, then raise KeyboardInterrupt
+        call_count = 0
+        def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 3:
+                raise KeyboardInterrupt("Test stop")
+            return []  # No messages
+        
+        redis_client.xreadgroup = MagicMock(side_effect=side_effect)
+        
+        with pytest.raises(KeyboardInterrupt):
+            consumer.run()
+        
+        # Verify xreadgroup was called multiple times
+        assert redis_client.xreadgroup.call_count == 3
+        
+        # Verify the correct parameters
+        expected_call = call(
+            groupname=consumer.group_name,
+            consumername=consumer.consumer_name,
+            streams={consumer.stream_name: ">"},
+            count=1,
+            block=2000
+        )
+        assert redis_client.xreadgroup.call_args == expected_call
+
+    @patch('app.services.consumer.time.sleep')
+    def test_run_with_single_message(self, mock_sleep, redis_client, sample_redis_message):
+        """Test run method with a single message."""
+        with patch.object(DataConsumer, '_ensure_consumer_group'), \
+             patch.object(DataConsumer, '_handle_message') as mock_handle:
+            
+            consumer = DataConsumer(redis_client)
+            
+            # Mock xreadgroup to return one message, then stop
+            call_count = 0
+            def side_effect(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    return [(consumer.stream_name, [("msg_id_1", sample_redis_message)])]
+                else:
+                    raise KeyboardInterrupt("Test stop")
+            
+            redis_client.xreadgroup = MagicMock(side_effect=side_effect)
+            
+            with pytest.raises(KeyboardInterrupt):
+                consumer.run()
+            
+            # Verify message was handled
+            mock_handle.assert_called_once_with("msg_id_1", sample_redis_message)
+
+    @patch('app.services.consumer.time.sleep')
+    def test_run_with_multiple_messages(self, mock_sleep, redis_client, sample_redis_message):
+        """Test run method with multiple messages."""
+        with patch.object(DataConsumer, '_ensure_consumer_group'), \
+             patch.object(DataConsumer, '_handle_message') as mock_handle:
+            
+            consumer = DataConsumer(redis_client)
+            
+            # Mock xreadgroup to return multiple messages
+            messages = [
+                ("msg_id_1", sample_redis_message),
+                ("msg_id_2", sample_redis_message),
+                ("msg_id_3", sample_redis_message)
+            ]
+            
+            call_count = 0
+            def side_effect(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    return [(consumer.stream_name, messages)]
+                else:
+                    raise KeyboardInterrupt("Test stop")
+            
+            redis_client.xreadgroup = MagicMock(side_effect=side_effect)
+            
+            with pytest.raises(KeyboardInterrupt):
+                consumer.run()
+            
+            # Verify all messages were handled
+            assert mock_handle.call_count == 3
+            mock_handle.assert_any_call("msg_id_1", sample_redis_message)
+            mock_handle.assert_any_call("msg_id_2", sample_redis_message)
+            mock_handle.assert_any_call("msg_id_3", sample_redis_message)
+
+    @patch('app.services.consumer.time.sleep')
+    def test_run_with_redis_exception(self, mock_sleep, redis_client, caplog_error):
+        """Test run method with Redis exception."""
+        with patch.object(DataConsumer, '_ensure_consumer_group'):
+            consumer = DataConsumer(redis_client)
+        
+        # Mock xreadgroup to raise Redis error, then stop
+        call_count = 0
+        def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise redis.RedisError("Redis connection failed")
+            else:
+                raise KeyboardInterrupt("Test stop")
+        
+        redis_client.xreadgroup = MagicMock(side_effect=side_effect)
+        
+        with pytest.raises(KeyboardInterrupt):
+            consumer.run()
+        
+        # Verify error was logged and sleep was called
+        assert "Error while processing messages" in caplog_error.text
+        assert "Redis connection failed" in caplog_error.text
+        mock_sleep.assert_called_with(5)
+
+    @patch('app.services.consumer.time.sleep')
+    def test_run_with_general_exception(self, mock_sleep, redis_client, caplog_error):
+        """Test run method with general exception."""
+        with patch.object(DataConsumer, '_ensure_consumer_group'):
+            consumer = DataConsumer(redis_client)
+        
+        # Mock xreadgroup to raise general error
+        call_count = 0
+        def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("Unexpected error")
+            else:
+                raise KeyboardInterrupt("Test stop")
+        
+        redis_client.xreadgroup = MagicMock(side_effect=side_effect)
+        
+        with pytest.raises(KeyboardInterrupt):
+            consumer.run()
+        
+        # Verify error was logged with traceback
+        assert "Error while processing messages" in caplog_error.text
+        mock_sleep.assert_called_with(5)
+
+    def test_handle_message_success(self, sample_redis_message, caplog_info):
+        """Test successful message handling."""
+        # Use a mock Redis client instead of FakeRedis for precise assertion testing
+        mock_redis_client = MagicMock()
+        
+        with patch.object(DataConsumer, '_ensure_consumer_group'), \
+             patch('app.services.consumer.SessionLocal') as mock_session_local, \
+             patch('app.services.consumer.RedisRepository') as mock_redis_repo, \
+             patch('app.services.consumer.ProcessingService') as mock_processing_service:
+            
+            # Setup mocks
+            mock_session = MagicMock()
+            mock_session_local.return_value = mock_session
+            
+            mock_redis_repo_instance = MagicMock()
+            mock_redis_repo.return_value = mock_redis_repo_instance
+            
+            mock_processing_service_instance = MagicMock()
+            mock_processing_service.return_value = mock_processing_service_instance
+            
+            consumer = DataConsumer(mock_redis_client)
+            consumer._handle_message("msg_id_1", sample_redis_message)
+            
+            # Verify API response was validated
+            mock_processing_service.assert_called_once()
+            mock_processing_service_instance.process_snapshot.assert_called_once()
+            
+            # Verify message was acknowledged and trimmed
+            mock_redis_client.xack.assert_called_once_with(
+                consumer.stream_name, consumer.group_name, "msg_id_1"
+            )
+            mock_redis_client.xtrim.assert_called_once_with(
+                consumer.stream_name, minid="msg_id_1"
+            )
+            
+            # Verify session was closed
+            mock_session.close.assert_called_once()
+            
+            # Verify success logging
+            assert "Successfully processed and acknowledged message msg_id_1" in caplog_info.text
+            assert "Stream 'test_stream' trimmed up to message msg_id_1" in caplog_info.text
+
+    def test_handle_message_validation_error(self, invalid_redis_message, caplog):
+        """Test message handling with validation error."""
+        import logging
+        
+        # Set up logging for the consumer module
+        logger = logging.getLogger('app.services.consumer')
+        logger.setLevel(logging.ERROR)
+        caplog.set_level(logging.ERROR, logger='app.services.consumer')
+        
+        mock_redis_client = MagicMock()
+        
+        with patch.object(DataConsumer, '_ensure_consumer_group'), \
+             patch('app.services.consumer.SessionLocal') as mock_session_local:
+            
+            mock_session = MagicMock()
+            mock_session_local.return_value = mock_session
+            
+            consumer = DataConsumer(mock_redis_client)
+            consumer._handle_message("msg_id_1", invalid_redis_message)
+            
+            # Verify message was acknowledged despite error
+            mock_redis_client.xack.assert_called_once_with(
+                consumer.stream_name, consumer.group_name, "msg_id_1"
+            )
+            mock_redis_client.xtrim.assert_called_once_with(
+                consumer.stream_name, minid="msg_id_1"
+            )
+            
+            # Verify error logging
+            assert "Validation/JSON error for message msg_id_1" in caplog.text
+            assert "Acknowledging to avoid reprocessing" in caplog.text
+            
+            # Verify session was closed
+            mock_session.close.assert_called_once()
+
+    def test_handle_message_json_decode_error(self, malformed_redis_message, caplog_error):
+        """Test message handling with JSON decode error."""
+        mock_redis_client = MagicMock()
+        
+        with patch.object(DataConsumer, '_ensure_consumer_group'), \
+             patch('app.services.consumer.SessionLocal') as mock_session_local:
+            
+            mock_session = MagicMock()
+            mock_session_local.return_value = mock_session
+            
+            consumer = DataConsumer(mock_redis_client)
+            consumer._handle_message("msg_id_1", malformed_redis_message)
+            
+            # Verify message was acknowledged despite error
+            mock_redis_client.xack.assert_called_once()
+            mock_redis_client.xtrim.assert_called_once()
+            
+            # Verify error logging
+            assert "Validation/JSON error for message msg_id_1" in caplog_error.text
+
+    def test_handle_message_processing_error(self, sample_redis_message, caplog_error):
+        """Test message handling with processing service error."""
+        mock_redis_client = MagicMock()
+        
+        with patch.object(DataConsumer, '_ensure_consumer_group'), \
+             patch('app.services.consumer.SessionLocal') as mock_session_local, \
+             patch('app.services.consumer.RedisRepository') as mock_redis_repo, \
+             patch('app.services.consumer.ProcessingService') as mock_processing_service:
+            
+            # Setup mocks
+            mock_session = MagicMock()
+            mock_session_local.return_value = mock_session
+            
+            mock_redis_repo_instance = MagicMock()
+            mock_redis_repo.return_value = mock_redis_repo_instance
+            
+            mock_processing_service_instance = MagicMock()
+            mock_processing_service_instance.process_snapshot.side_effect = Exception("Processing failed")
+            mock_processing_service.return_value = mock_processing_service_instance
+            
+            consumer = DataConsumer(mock_redis_client)
+            consumer._handle_message("msg_id_1", sample_redis_message)
+            
+            # Verify message was NOT acknowledged (should be retried)
+            mock_redis_client.xack.assert_not_called()
+            mock_redis_client.xtrim.assert_not_called()
+            
+            # Verify error logging
+            assert "Failed to process message msg_id_1" in caplog_error.text
+            assert "It will be retried" in caplog_error.text
+            
+            # Verify session was closed
+            mock_session.close.assert_called_once()
+
+    def test_handle_message_database_error(self, sample_redis_message, caplog):
+        """Test message handling with database error."""
+        import logging
+        caplog.set_level(logging.ERROR)
+        
+        mock_redis_client = MagicMock()
+        
+        with patch.object(DataConsumer, '_ensure_consumer_group'), \
+             patch('app.services.consumer.SessionLocal') as mock_session_local:
+            
+            # Mock session creation to fail
+            mock_session_local.side_effect = Exception("Database connection failed")
+            
+            consumer = DataConsumer(mock_redis_client)
+            consumer._handle_message("msg_id_1", sample_redis_message)
+            
+            # Verify error was logged
+            assert "Failed to process message msg_id_1" in caplog.text
+            assert "Database connection failed" in caplog.text
+
+    def test_handle_message_redis_repo_creation_error(self, redis_client, sample_redis_message, caplog_error):
+        """Test message handling with Redis repository creation error."""
+        with patch.object(DataConsumer, '_ensure_consumer_group'), \
+             patch('app.services.consumer.SessionLocal') as mock_session_local, \
+             patch('app.services.consumer.RedisRepository') as mock_redis_repo:
+            
+            # Setup mocks
+            mock_session = MagicMock()
+            mock_session_local.return_value = mock_session
+            
+            # Make Redis repository creation fail
+            mock_redis_repo.side_effect = Exception("Redis repository creation failed")
+            
+            consumer = DataConsumer(redis_client)
+            consumer._handle_message("msg_id_1", sample_redis_message)
+            
+            # Verify error was logged
+            assert "Failed to process message msg_id_1" in caplog_error.text
+            
+            # Verify session was still closed
+            mock_session.close.assert_called_once()
+
+    def test_handle_message_xack_error(self, sample_redis_message, caplog_info):
+        """Test message handling when xack fails."""
+        mock_redis_client = MagicMock()
+        
+        with patch.object(DataConsumer, '_ensure_consumer_group'), \
+             patch('app.services.consumer.SessionLocal') as mock_session_local, \
+             patch('app.services.consumer.RedisRepository') as mock_redis_repo, \
+             patch('app.services.consumer.ProcessingService') as mock_processing_service:
+            
+            # Setup successful processing
+            mock_session = MagicMock()
+            mock_session_local.return_value = mock_session
+            
+            mock_redis_repo_instance = MagicMock()
+            mock_redis_repo.return_value = mock_redis_repo_instance
+            
+            mock_processing_service_instance = MagicMock()
+            mock_processing_service.return_value = mock_processing_service_instance
+            
+            # Make xack fail
+            mock_redis_client.xack.side_effect = redis.RedisError("xack failed")
+            
+            consumer = DataConsumer(mock_redis_client)
+            
+            # Should not raise exception, but should log error
+            consumer._handle_message("msg_id_1", sample_redis_message)
+            
+            # Processing should have succeeded
+            mock_processing_service_instance.process_snapshot.assert_called_once()
+
+    def test_handle_message_xtrim_error(self, sample_redis_message):
+        """Test message handling when xtrim fails."""
+        mock_redis_client = MagicMock()
+        
+        with patch.object(DataConsumer, '_ensure_consumer_group'), \
+             patch('app.services.consumer.SessionLocal') as mock_session_local, \
+             patch('app.services.consumer.RedisRepository') as mock_redis_repo, \
+             patch('app.services.consumer.ProcessingService') as mock_processing_service:
+            
+            # Setup successful processing and xack
+            mock_session = MagicMock()
+            mock_session_local.return_value = mock_session
+            
+            mock_redis_repo_instance = MagicMock()
+            mock_redis_repo.return_value = mock_redis_repo_instance
+            
+            mock_processing_service_instance = MagicMock()
+            mock_processing_service.return_value = mock_processing_service_instance
+            
+            # Make xtrim fail
+            mock_redis_client.xtrim.side_effect = redis.RedisError("xtrim failed")
+            
+            consumer = DataConsumer(mock_redis_client)
+            
+            # Should not raise exception
+            consumer._handle_message("msg_id_1", sample_redis_message)
+            
+            # Processing and xack should have succeeded
+            mock_processing_service_instance.process_snapshot.assert_called_once()
+            mock_redis_client.xack.assert_called_once()
+
+    def test_handle_message_session_close_error(self, sample_redis_message):
+        """Test message handling when session.close() fails."""
+        mock_redis_client = MagicMock()
+        
+        with patch.object(DataConsumer, '_ensure_consumer_group'), \
+             patch('app.services.consumer.SessionLocal') as mock_session_local, \
+             patch('app.services.consumer.RedisRepository') as mock_redis_repo, \
+             patch('app.services.consumer.ProcessingService') as mock_processing_service:
+            
+            # Setup mocks
+            mock_session = MagicMock()
+            mock_session.close.side_effect = Exception("Close failed")
+            mock_session_local.return_value = mock_session
+            
+            mock_redis_repo_instance = MagicMock()
+            mock_redis_repo.return_value = mock_redis_repo_instance
+            
+            mock_processing_service_instance = MagicMock()
+            mock_processing_service.return_value = mock_processing_service_instance
+            
+            consumer = DataConsumer(mock_redis_client)
+            
+            # Should not raise exception despite close failure
+            consumer._handle_message("msg_id_1", sample_redis_message)
+            
+            # Processing should have succeeded
+            mock_processing_service_instance.process_snapshot.assert_called_once()
+
+    def test_handle_message_with_empty_data(self, caplog_error):
+        """Test message handling with empty data."""
+        mock_redis_client = MagicMock()
+        
+        with patch.object(DataConsumer, '_ensure_consumer_group'), \
+             patch('app.services.consumer.SessionLocal') as mock_session_local:
+            
+            mock_session = MagicMock()
+            mock_session_local.return_value = mock_session
+            
+            empty_message = {"data": "{}"}  # Empty JSON object
+            
+            consumer = DataConsumer(mock_redis_client)
+            consumer._handle_message("msg_id_1", empty_message)
+            
+            # Should acknowledge even if data is empty but valid
+            mock_redis_client.xack.assert_called_once()
+            mock_redis_client.xtrim.assert_called_once()
+
+    def test_handle_message_with_missing_data_key(self, redis_client, caplog_error):
+        """Test message handling with missing 'data' key."""
+        with patch.object(DataConsumer, '_ensure_consumer_group'), \
+             patch('app.services.consumer.SessionLocal') as mock_session_local:
+            
+            mock_session = MagicMock()
+            mock_session_local.return_value = mock_session
+            
+            invalid_message = {"not_data": "some_value"}
+            
+            consumer = DataConsumer(redis_client)
+            consumer._handle_message("msg_id_1", invalid_message)
+            
+            # Should be treated as an error and acknowledged to avoid reprocessing
+            assert "Failed to process message msg_id_1" in caplog_error.text
+
+    def test_consumer_integration_with_settings(self, redis_client):
+        """Test consumer integration with actual settings."""
+        # This test verifies that the consumer uses actual settings values
+        with patch.object(DataConsumer, '_ensure_consumer_group'):
+            consumer = DataConsumer(redis_client)
+            
+            # Verify settings are used correctly
+            from app.core.config import settings
+            assert consumer.stream_name == settings.REDIS_STREAM_NAME
+            assert consumer.group_name == settings.REDIS_CONSUMER_GROUP
+            assert consumer.consumer_name == settings.REDIS_CONSUMER_NAME
+
+    def test_consumer_message_flow_with_multiple_streams(self, redis_client, sample_redis_message):
+        """Test consumer handling multiple streams (edge case)."""
+        with patch.object(DataConsumer, '_ensure_consumer_group'), \
+             patch.object(DataConsumer, '_handle_message') as mock_handle:
+            
+            consumer = DataConsumer(redis_client)
+            
+            # Mock xreadgroup to return messages from multiple streams
+            multiple_stream_response = [
+                (consumer.stream_name, [("msg_id_1", sample_redis_message)]),
+                ("other_stream", [("msg_id_2", sample_redis_message)])
+            ]
+            
+            call_count = 0
+            def side_effect(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    return multiple_stream_response
+                else:
+                    raise KeyboardInterrupt("Test stop")
+            
+            redis_client.xreadgroup = MagicMock(side_effect=side_effect)
+            
+            with pytest.raises(KeyboardInterrupt):
+                consumer.run()
+            
+            # Should handle messages from all streams
+            assert mock_handle.call_count == 2

@@ -1,0 +1,422 @@
+"""
+Comprehensive tests for repository classes covering all edge cases.
+"""
+import json
+import pytest
+from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
+from sqlalchemy.exc import SQLAlchemyError
+import redis
+
+from app.db.repository import (
+    BaseRepository, StationRepository, BikeMovementRepository, 
+    RedisRepository, BikeStayRepository
+)
+from app.schemas.bike_data import Station as StationSchema, BikeState
+
+
+class TestBaseRepository:
+    """Test cases for BaseRepository class."""
+
+    def test_base_repository_initialization(self, test_db_session):
+        """Test BaseRepository initialization."""
+        repo = BaseRepository(test_db_session)
+        assert repo.db == test_db_session
+
+    def test_base_repository_with_none_session(self):
+        """Test BaseRepository with None session."""
+        repo = BaseRepository(None)
+        assert repo.db is None
+
+
+class TestStationRepository:
+    """Test cases for StationRepository class."""
+
+    def test_get_by_uid_existing_station(self, test_db_session):
+        """Test getting an existing station by UID."""
+        from shared_models.models import Station
+        
+        # Create a real station record
+        station = Station(uid=1001, name="Test Station", lat=47.5, lng=19.0)
+        test_db_session.add(station)
+        test_db_session.commit()
+        
+        repo = StationRepository(test_db_session)
+        result = repo.get_by_uid(1001)
+        
+        assert result is not None
+        assert result.uid == 1001
+        assert result.name == "Test Station"
+
+    def test_get_by_uid_non_existing_station(self, test_db_session):
+        """Test getting a non-existing station by UID."""
+        repo = StationRepository(test_db_session)
+        result = repo.get_by_uid(9999)
+        
+        assert result is None
+
+    def test_get_by_uid_database_error(self, test_db_session):
+        """Test get_by_uid with database error."""
+        # Mock the session to raise an exception
+        with patch.object(test_db_session, 'query', side_effect=SQLAlchemyError("Database error")):
+            repo = StationRepository(test_db_session)
+            
+            with pytest.raises(SQLAlchemyError):
+                repo.get_by_uid(1001)
+
+    def test_upsert_new_station(self, test_db_session):
+        """Test upserting a new station."""
+        station_schema = StationSchema(
+            uid=1001,
+            lat=47.5,
+            lng=19.0,
+            name="New Station",
+            spot=True,
+            bike_list=[]
+        )
+        
+        repo = StationRepository(test_db_session)
+        result = repo.upsert(station_schema)
+        
+        assert result is not None
+        assert result.uid == 1001
+        assert result.name == "New Station"
+        assert result.lat == 47.5
+        assert result.lng == 19.0
+
+    def test_upsert_existing_station(self, test_db_session):
+        """Test upserting an existing station."""
+        from shared_models.models import Station
+        
+        # Create existing station
+        existing_station = Station(uid=1001, name="Old Station", lat=47.0, lng=18.0)
+        test_db_session.add(existing_station)
+        test_db_session.commit()
+        
+        # Update with new data
+        station_schema = StationSchema(
+            uid=1001,
+            lat=47.5,
+            lng=19.0,
+            name="Updated Station",
+            spot=True,
+            bike_list=[]
+        )
+        
+        repo = StationRepository(test_db_session)
+        result = repo.upsert(station_schema)
+        
+        # Verify station was updated
+        assert result.name == "Updated Station"
+        assert result.lat == 47.5
+        assert result.lng == 19.0
+
+    def test_upsert_with_unicode_name(self, test_db_session):
+        """Test upserting station with unicode name."""
+        station_schema = StationSchema(
+            uid=1001,
+            lat=47.5,
+            lng=19.0,
+            name="Főváros állomás 🚲",
+            spot=True,
+            bike_list=[]
+        )
+        
+        repo = StationRepository(test_db_session)
+        result = repo.upsert(station_schema)
+        
+        assert result.name == "Főváros állomás 🚲"
+
+    def test_upsert_commit_error(self, test_db_session):
+        """Test upsert with commit error."""
+        station_schema = StationSchema(
+            uid=1001,
+            lat=47.5,
+            lng=19.0,
+            name="Test Station",
+            spot=True,
+            bike_list=[]
+        )
+        
+        with patch.object(test_db_session, 'commit', side_effect=SQLAlchemyError("Commit error")):
+            repo = StationRepository(test_db_session)
+            
+            with pytest.raises(SQLAlchemyError):
+                repo.upsert(station_schema)
+
+
+class TestBikeMovementRepository:
+    """Test cases for BikeMovementRepository class."""
+
+    def test_create_movement_success(self, test_db_session):
+        """Test successful movement creation."""
+        repo = BikeMovementRepository(test_db_session)
+        timestamp = datetime.now(timezone.utc)
+        
+        movement_data = {
+            "bike_number": "BIKE123",
+            "from_station_uid": 1001,
+            "to_station_uid": 1002,
+            "start_time": timestamp,
+            "end_time": timestamp,
+            "distance": 1.5
+        }
+        
+        result = repo.create(movement_data)
+        
+        assert result is not None
+        assert result.bike_number == "BIKE123"
+        assert result.from_station_uid == 1001
+        assert result.to_station_uid == 1002
+        assert result.distance == 1.5
+
+    def test_create_movement_with_empty_data(self, test_db_session):
+        """Test movement creation with minimal data."""
+        repo = BikeMovementRepository(test_db_session)
+        timestamp = datetime.now(timezone.utc)
+        
+        movement_data = {
+            "bike_number": "",
+            "from_station_uid": 0,
+            "to_station_uid": 0,
+            "start_time": timestamp,
+            "end_time": timestamp,
+            "distance": 0.0
+        }
+        
+        result = repo.create(movement_data)
+        
+        assert result is not None
+        assert result.bike_number == ""
+        assert result.distance == 0.0
+
+    def test_create_movement_database_error(self, test_db_session):
+        """Test movement creation with database error."""
+        with patch.object(test_db_session, 'add', side_effect=SQLAlchemyError("Database error")):
+            repo = BikeMovementRepository(test_db_session)
+            timestamp = datetime.now(timezone.utc)
+            
+            movement_data = {
+                "bike_number": "BIKE123",
+                "from_station_uid": 1001,
+                "to_station_uid": 1002,
+                "start_time": timestamp,
+                "end_time": timestamp,
+                "distance": 1.5
+            }
+            
+            with pytest.raises(SQLAlchemyError):
+                repo.create(movement_data)
+
+    def test_create_movement_commit_error(self, test_db_session):
+        """Test movement creation with commit error."""
+        with patch.object(test_db_session, 'commit', side_effect=SQLAlchemyError("Commit error")):
+            repo = BikeMovementRepository(test_db_session)
+            timestamp = datetime.now(timezone.utc)
+            
+            movement_data = {
+                "bike_number": "BIKE123",
+                "from_station_uid": 1001,
+                "to_station_uid": 1002,
+                "start_time": timestamp,
+                "end_time": timestamp,
+                "distance": 1.5
+            }
+            
+            with pytest.raises(SQLAlchemyError):
+                repo.create(movement_data)
+
+
+class TestBikeStayRepository:
+    """Test cases for BikeStayRepository class."""
+
+    def test_find_active_stay_exists(self, test_db_session):
+        """Test finding an existing active stay."""
+        from shared_models.models import BikeStay
+        
+        # Create an active stay
+        stay = BikeStay(
+            bike_number="BIKE123",
+            station_uid=1001,
+            start_time=datetime.now(timezone.utc),
+            end_time=None
+        )
+        test_db_session.add(stay)
+        test_db_session.commit()
+        
+        repo = BikeStayRepository(test_db_session)
+        result = repo.find_active_stay("BIKE123")
+        
+        assert result is not None
+        assert result.bike_number == "BIKE123"
+        assert result.end_time is None
+
+    def test_find_active_stay_not_exists(self, test_db_session):
+        """Test finding non-existing active stay."""
+        repo = BikeStayRepository(test_db_session)
+        result = repo.find_active_stay("NONEXISTENT")
+        
+        assert result is None
+
+    def test_create_stay_success(self, test_db_session):
+        """Test successful stay creation."""
+        repo = BikeStayRepository(test_db_session)
+        timestamp = datetime.now(timezone.utc)
+        
+        stay_data = {
+            "bike_number": "BIKE123",
+            "station_uid": 1001,
+            "start_time": timestamp,
+            "end_time": None
+        }
+        
+        result = repo.create_stay(stay_data)
+        
+        assert result is not None
+        assert result.bike_number == "BIKE123"
+        assert result.station_uid == 1001
+        assert result.start_time == timestamp
+        assert result.end_time is None
+
+    def test_end_stay_success(self, test_db_session):
+        """Test successfully ending a stay."""
+        from shared_models.models import BikeStay
+        
+        # Create an active stay
+        start_time = datetime.now(timezone.utc)
+        stay = BikeStay(
+            bike_number="BIKE123",
+            station_uid=1001,
+            start_time=start_time,
+            end_time=None
+        )
+        test_db_session.add(stay)
+        test_db_session.commit()
+        
+        repo = BikeStayRepository(test_db_session)
+        end_time = datetime.now(timezone.utc)
+        repo.end_stay(stay, end_time)
+        
+        # Refresh to get updated data
+        test_db_session.refresh(stay)
+        assert stay.end_time == end_time
+
+    def test_end_stay_commit_error(self, test_db_session):
+        """Test ending stay with commit error."""
+        from shared_models.models import BikeStay
+        
+        stay = BikeStay(
+            bike_number="BIKE123",
+            station_uid=1001,
+            start_time=datetime.now(timezone.utc),
+            end_time=None
+        )
+        test_db_session.add(stay)
+        test_db_session.commit()
+        
+        with patch.object(test_db_session, 'commit', side_effect=SQLAlchemyError("Commit error")):
+            repo = BikeStayRepository(test_db_session)
+            
+            with pytest.raises(SQLAlchemyError):
+                repo.end_stay(stay, datetime.now(timezone.utc))
+
+
+class TestRedisRepository:
+    """Test cases for RedisRepository class."""
+
+    def test_get_bike_state_exists(self, redis_client):
+        """Test getting existing bike state."""
+        # Set up bike state data
+        bike_state_data = {
+            "station_uid": 1001,
+            "timestamp": 1640995200.0,
+            "stay_start_time": 1640995200.0
+        }
+        redis_client.hset("test_bike_states", "BIKE123", json.dumps(bike_state_data))
+        
+        # Mock the constructor to use the provided redis client
+        with patch.object(RedisRepository, '__init__', lambda self, redis_client=None: setattr(self, 'client', redis_client) or setattr(self, 'bike_state_hash', 'test_bike_states') or setattr(self, 'station_bikes_prefix', 'test_station_bikes')):
+            repo = RedisRepository(redis_client)
+            result = repo.get_bike_state("BIKE123")
+            
+            assert result is not None
+            assert result.station_uid == 1001
+            assert result.timestamp == 1640995200.0
+
+    def test_get_bike_state_not_exists(self, redis_client):
+        """Test getting non-existing bike state."""
+        with patch.object(RedisRepository, '__init__', lambda self, redis_client=None: setattr(self, 'client', redis_client) or setattr(self, 'bike_state_hash', 'test_bike_states') or setattr(self, 'station_bikes_prefix', 'test_station_bikes')):
+            repo = RedisRepository(redis_client)
+            result = repo.get_bike_state("NONEXISTENT")
+            
+            assert result is None
+
+    def test_get_bike_state_invalid_json(self, redis_client):
+        """Test getting bike state with invalid JSON."""
+        # Set invalid JSON data
+        redis_client.hset("test_bike_states", "BIKE123", "invalid json")
+        
+        with patch.object(RedisRepository, '__init__', lambda self, redis_client=None: setattr(self, 'client', redis_client) or setattr(self, 'bike_state_hash', 'test_bike_states') or setattr(self, 'station_bikes_prefix', 'test_station_bikes')):
+            repo = RedisRepository(redis_client)
+            result = repo.get_bike_state("BIKE123")
+            
+            assert result is None
+
+    def test_set_bike_state_success(self, redis_client):
+        """Test setting bike state successfully."""
+        state_data = {
+            "station_uid": 1001,
+            "timestamp": 1640995200.0,
+            "stay_start_time": 1640995200.0
+        }
+        
+        with patch.object(RedisRepository, '__init__', lambda self, redis_client=None: setattr(self, 'client', redis_client) or setattr(self, 'bike_state_hash', 'test_bike_states') or setattr(self, 'station_bikes_prefix', 'test_station_bikes')):
+            repo = RedisRepository(redis_client)
+            repo.set_bike_state("BIKE123", state_data)
+            
+            # Verify data was set
+            stored_data = redis_client.hget("test_bike_states", "BIKE123")
+            assert stored_data is not None
+            parsed_data = json.loads(stored_data)
+            assert parsed_data["station_uid"] == 1001
+
+    def test_set_bike_state_redis_error(self, redis_client):
+        """Test setting bike state with Redis error."""
+        state_data = {
+            "station_uid": 1001,
+            "timestamp": 1640995200.0,
+            "stay_start_time": 1640995200.0
+        }
+        
+        with patch.object(redis_client, 'hset', side_effect=redis.RedisError("Redis error")):
+            with patch.object(RedisRepository, '__init__', lambda self, redis_client=None: setattr(self, 'client', redis_client) or setattr(self, 'bike_state_hash', 'test_bike_states') or setattr(self, 'station_bikes_prefix', 'test_station_bikes')):
+                repo = RedisRepository(redis_client)
+                
+                with pytest.raises(redis.RedisError):
+                    repo.set_bike_state("BIKE123", state_data)
+
+    def test_update_station_occupancy_success(self, redis_client):
+        """Test updating station occupancy successfully."""
+        bike_numbers = {"BIKE123", "BIKE456"}
+        
+        with patch.object(RedisRepository, '__init__', lambda self, redis_client=None: setattr(self, 'client', redis_client) or setattr(self, 'bike_state_hash', 'test_bike_states') or setattr(self, 'station_bikes_prefix', 'test_station_bikes')):
+            repo = RedisRepository(redis_client)
+            repo.update_station_occupancy(1001, bike_numbers)
+            
+            # Verify bikes were added to station set
+            bikes = redis_client.smembers("test_station_bikes:1001")
+            assert "BIKE123" in bikes
+            assert "BIKE456" in bikes
+
+    def test_update_station_occupancy_empty_set(self, redis_client):
+        """Test updating station occupancy with empty bike set."""
+        # First add some bikes
+        redis_client.sadd("test_station_bikes:1001", "BIKE123", "BIKE456")
+        
+        with patch.object(RedisRepository, '__init__', lambda self, redis_client=None: setattr(self, 'client', redis_client) or setattr(self, 'bike_state_hash', 'test_bike_states') or setattr(self, 'station_bikes_prefix', 'test_station_bikes')):
+            repo = RedisRepository(redis_client)
+            repo.update_station_occupancy(1001, set())
+            
+            # Verify station set was cleared
+            bikes = redis_client.smembers("test_station_bikes:1001")
+            assert len(bikes) == 0

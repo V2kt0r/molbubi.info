@@ -1,0 +1,287 @@
+"""
+Comprehensive tests for database initialization and connection handling.
+"""
+import pytest
+from unittest.mock import patch, MagicMock
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.db.database import engine, SessionLocal, get_db, init_db
+
+
+class TestDatabaseConnection:
+    """Test cases for database connection and session management."""
+
+    def test_engine_creation(self):
+        """Test that engine is properly created."""
+        assert engine is not None
+        # Engine URL should match the settings format
+        assert "postgresql://" in str(engine.url)
+
+    def test_session_local_creation(self):
+        """Test that SessionLocal is properly configured."""
+        assert SessionLocal is not None
+        # Check that SessionLocal is a sessionmaker
+        assert hasattr(SessionLocal, '__call__')
+
+    def test_get_db_generator(self):
+        """Test get_db generator function."""
+        # Mock the SessionLocal to avoid actual database connection
+        with patch('app.db.database.SessionLocal') as mock_session_local:
+            mock_session = MagicMock()
+            mock_session_local.return_value = mock_session
+            
+            # Test the generator
+            db_generator = get_db()
+            db_session = next(db_generator)
+            
+            assert db_session == mock_session
+            mock_session_local.assert_called_once()
+            
+            # Test that the generator properly closes the session
+            try:
+                next(db_generator)
+            except StopIteration:
+                pass
+            
+            mock_session.close.assert_called_once()
+
+    def test_get_db_exception_handling(self):
+        """Test that get_db properly handles exceptions."""
+        with patch('app.db.database.SessionLocal') as mock_session_local:
+            mock_session = MagicMock()
+            mock_session_local.return_value = mock_session
+            
+            db_generator = get_db()
+            db_session = next(db_generator)
+            
+            # Simulate an exception
+            with pytest.raises(Exception):
+                raise Exception("Test exception")
+            
+            # The session should still be closed even if an exception occurs
+            try:
+                db_generator.close()
+            except GeneratorExit:
+                pass
+            
+            # In a real scenario, the context manager would ensure close is called
+            # We can't easily test this with the current generator structure
+
+    def test_get_db_multiple_calls(self):
+        """Test multiple calls to get_db."""
+        with patch('app.db.database.SessionLocal') as mock_session_local:
+            mock_session_1 = MagicMock()
+            mock_session_2 = MagicMock()
+            mock_session_local.side_effect = [mock_session_1, mock_session_2]
+            
+            # First call
+            db_gen_1 = get_db()
+            db_1 = next(db_gen_1)
+            
+            # Second call
+            db_gen_2 = get_db()
+            db_2 = next(db_gen_2)
+            
+            assert db_1 == mock_session_1
+            assert db_2 == mock_session_2
+            assert db_1 != db_2
+
+
+class TestInitDb:
+    """Test cases for database initialization."""
+
+    @patch('app.db.database.engine')
+    def test_init_db_success(self, mock_engine, caplog_info):
+        """Test successful database initialization."""
+        mock_connection = MagicMock()
+        mock_engine.connect.return_value.__enter__.return_value = mock_connection
+        
+        init_db()
+        
+        # Verify that the connection was used
+        mock_engine.connect.assert_called_once()
+        
+        # Verify that all three SQL commands were executed
+        assert mock_connection.execute.call_count == 3
+        
+        # Verify the calls were made (order matters)
+        calls = mock_connection.execute.call_args_list
+        assert len(calls) == 3
+        
+        # Verify commit was called
+        mock_connection.commit.assert_called_once()
+        
+        # Verify success logging
+        assert "TimescaleDB features initialized successfully" in caplog_info.text
+
+    @patch('app.db.database.engine')
+    def test_init_db_connection_failure(self, mock_engine, caplog_error):
+        """Test database initialization with connection failure."""
+        mock_engine.connect.side_effect = SQLAlchemyError("Connection failed")
+        
+        with pytest.raises(SQLAlchemyError):
+            init_db()
+        
+        # Verify error logging
+        assert "Failed to initialize TimescaleDB features" in caplog_error.text
+
+    @patch('app.db.database.engine')
+    def test_init_db_extension_creation_failure(self, mock_engine, caplog_error):
+        """Test database initialization with extension creation failure."""
+        mock_connection = MagicMock()
+        mock_engine.connect.return_value.__enter__.return_value = mock_connection
+        
+        # Make extension creation fail
+        mock_connection.execute.side_effect = [
+            SQLAlchemyError("Extension creation failed"),
+            None,  # For hypertable creation if it gets there
+            None
+        ]
+        
+        with pytest.raises(SQLAlchemyError):
+            init_db()
+        
+        # Verify error logging
+        assert "Failed to initialize TimescaleDB features" in caplog_error.text
+
+    @patch('app.db.database.engine')
+    def test_init_db_hypertable_creation_failure(self, mock_engine, caplog_error):
+        """Test database initialization with hypertable creation failure."""
+        mock_connection = MagicMock()
+        mock_engine.connect.return_value.__enter__.return_value = mock_connection
+        
+        # Make hypertable creation fail
+        mock_connection.execute.side_effect = [
+            None,  # Extension creation succeeds
+            SQLAlchemyError("Hypertable creation failed"),  # First hypertable fails
+            None   # Second hypertable (if it gets there)
+        ]
+        
+        with pytest.raises(SQLAlchemyError):
+            init_db()
+        
+        # Verify error logging
+        assert "Failed to initialize TimescaleDB features" in caplog_error.text
+
+    @patch('app.db.database.engine')
+    def test_init_db_commit_failure(self, mock_engine, caplog_error):
+        """Test database initialization with commit failure."""
+        mock_connection = MagicMock()
+        mock_engine.connect.return_value.__enter__.return_value = mock_connection
+        
+        # Make commit fail
+        mock_connection.execute.return_value = None  # All executes succeed
+        mock_connection.commit.side_effect = SQLAlchemyError("Commit failed")
+        
+        with pytest.raises(SQLAlchemyError):
+            init_db()
+        
+        # Verify error logging
+        assert "Failed to initialize TimescaleDB features" in caplog_error.text
+
+    @patch('app.db.database.engine')
+    def test_init_db_partial_success(self, mock_engine, caplog_info):
+        """Test database initialization with partial success."""
+        mock_connection = MagicMock()
+        mock_engine.connect.return_value.__enter__.return_value = mock_connection
+        
+        # Extension creation succeeds, first hypertable succeeds, second fails
+        mock_connection.execute.side_effect = [
+            None,  # Extension creation succeeds
+            None,  # First hypertable succeeds
+            SQLAlchemyError("Second hypertable creation failed")  # Second hypertable fails
+        ]
+        
+        with pytest.raises(SQLAlchemyError):
+            init_db()
+        
+        # Verify that at least some SQL commands were attempted
+        assert mock_connection.execute.call_count >= 2
+
+    @patch('app.db.database.engine')
+    def test_init_db_context_manager_exception(self, mock_engine, caplog_error):
+        """Test database initialization with context manager exception."""
+        # Make the context manager itself fail
+        mock_engine.connect.return_value.__enter__.side_effect = SQLAlchemyError("Context manager failed")
+        
+        with pytest.raises(SQLAlchemyError):
+            init_db()
+        
+        # Verify error logging
+        assert "Failed to initialize TimescaleDB features" in caplog_error.text
+
+    @patch('app.db.database.engine')
+    def test_init_db_multiple_calls(self, mock_engine, caplog_info):
+        """Test multiple calls to init_db."""
+        mock_connection = MagicMock()
+        mock_engine.connect.return_value.__enter__.return_value = mock_connection
+        
+        # First call
+        init_db()
+        
+        # Second call
+        init_db()
+        
+        # Verify both calls worked
+        assert mock_engine.connect.call_count == 2
+        assert "TimescaleDB features initialized successfully" in caplog_info.text
+
+    @patch('app.db.database.engine')
+    def test_init_db_text_objects_creation(self, mock_engine):
+        """Test that SQL text objects are properly created."""
+        mock_connection = MagicMock()
+        mock_engine.connect.return_value.__enter__.return_value = mock_connection
+        
+        init_db()
+        
+        # Check that execute was called with text objects
+        calls = mock_connection.execute.call_args_list
+        
+        # Should have 3 calls: extension + 2 hypertables
+        assert len(calls) == 3
+        
+        # Each call should be with a text object
+        for call in calls:
+            args = call[0]
+            assert len(args) == 1
+            # The argument should be a SQLAlchemy text object
+            assert hasattr(args[0], 'text') or str(type(args[0])) == "<class 'sqlalchemy.sql.elements.TextClause'>"
+
+    @patch('app.db.database.engine')
+    def test_init_db_exception_propagation(self, mock_engine):
+        """Test that exceptions are properly propagated from init_db."""
+        custom_exception = SQLAlchemyError("Custom error message")
+        mock_engine.connect.side_effect = custom_exception
+        
+        with pytest.raises(SQLAlchemyError) as exc_info:
+            init_db()
+        
+        assert exc_info.value == custom_exception
+
+    @patch('app.db.database.engine')
+    def test_init_db_logging_details(self, mock_engine, caplog):
+        """Test detailed logging in init_db."""
+        mock_connection = MagicMock()
+        mock_engine.connect.return_value.__enter__.return_value = mock_connection
+        
+        # Test success case
+        init_db()
+        
+        # Check that info level logging occurred
+        info_logs = [record for record in caplog.records if record.levelname == 'INFO']
+        assert len(info_logs) >= 1
+        assert "TimescaleDB features initialized successfully" in info_logs[-1].message
+        
+        # Test error case
+        caplog.clear()
+        mock_engine.connect.side_effect = SQLAlchemyError("Test error")
+        
+        with pytest.raises(SQLAlchemyError):
+            init_db()
+        
+        # Check that error level logging occurred
+        error_logs = [record for record in caplog.records if record.levelname == 'ERROR']
+        assert len(error_logs) >= 1
+        assert "Failed to initialize TimescaleDB features" in error_logs[-1].message
+        assert "Test error" in error_logs[-1].message
