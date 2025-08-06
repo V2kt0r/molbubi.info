@@ -59,7 +59,11 @@ services:
 
   # The frontend service
   frontend:
-    build: ./frontend
+    build: 
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_ENVIRONMENT: ${VITE_ENVIRONMENT}
     env_file:
       - .env
     depends_on:

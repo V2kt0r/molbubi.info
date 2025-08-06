@@ -89,6 +89,27 @@ poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 poetry export -f requirements.txt --output requirements.txt --without-hashes
 ```
 
+### Frontend Development (frontend/)
+```bash
+# Install dependencies
+cd frontend/
+npm install
+
+# Run development server (with proxy for API calls)
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
+```
+
+**Frontend Environment Configuration:**
+- Development mode: Uses Vite proxy to avoid CORS issues
+- Production mode: Uses direct API URLs from environment variables
+- Configuration: Edit `frontend/.env` to set `VITE_API_BASE_URL` for your target API
+
 ### Collector Development (collector/)
 ```bash
 # Install dependencies with Poetry
@@ -136,6 +157,9 @@ poetry run alembic history
 - `API_DOCKER_PORT`: Port for API service (default: 80)
 - `PGADMIN_DOCKER_PORT`: Port for pgAdmin (default: 5050)
 - `REDIS_INSIGHT_DOCKER_PORT`: Port for Redis Insight (default: 8001)
+- `VITE_API_BASE_URL`: Frontend API endpoint (e.g., https://dev.molbubi.info/api/v1)
+- `VITE_ENVIRONMENT`: Environment name (dev, prod)
+- `FRONTEND_DOCKER_PORT`: Port for frontend service (default: 3080)
 
 ### Service Access Points
 - API: `http://localhost` (or configured port)
@@ -173,10 +197,29 @@ No formal test suite is currently implemented. When adding tests:
 - Mock external API calls (NextBike API)
 - Test database operations with test database
 
+## Deployment
+
+### GitHub Actions Deployment
+The project includes automated deployment via GitHub Actions:
+- **Production**: Push tags like `v1.0.0`
+- **Development**: Push tags like `v1.0.0-alpha.1` or `v1.0.0-beta.1`
+
+### Required GitHub Variables
+Set these in your GitHub repository settings for deployment:
+- `VITE_API_BASE_URL`: Frontend API endpoint for the target environment
+- `FRONTEND_DOCKER_PORT`: Port for frontend service
+- `SERVER_ADDRESS`: VPS server address for deployment
+- Other service configuration variables
+
+### Frontend Build Process
+- Development: Uses Vite proxy to avoid CORS issues
+- Production/Docker: Builds with `VITE_API_BASE_URL` baked into the static files
+- Build arguments are passed through Docker Compose during deployment
+
 ## Development Notes
 
 - The system uses Poetry for dependency management in the API service
-- Other services use pip with requirements.txt
+- Frontend uses npm with Vite for modern development experience
 - All services are containerized with Docker
 - The database uses TimescaleDB for efficient time-series data storage
 - Redis is used as a message queue between collector and processor
