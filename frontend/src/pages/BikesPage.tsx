@@ -1,11 +1,15 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../services/api'
-import { formatLocalDateTime, formatRelativeTime } from '../lib/date'
 import BikeCard from '../components/BikeCard'
+import { BikeMovement } from '../types/api'
 
 export default function BikesPage() {
   const [selectedBike, setSelectedBike] = useState<string | null>(null)
+  const [historyPages, setHistoryPages] = useState<{ [bikeNumber: string]: number }>({})
+  const [accumulatedHistory, setAccumulatedHistory] = useState<{ [bikeNumber: string]: BikeMovement[] }>({})
+  const navigate = useNavigate()
 
 
   const { data: bikes, isLoading, error } = useQuery({
@@ -13,11 +17,50 @@ export default function BikesPage() {
     queryFn: () => apiClient.getBikes(),
   })
 
-  const { data: bikeHistory, isLoading: historyLoading } = useQuery({
-    queryKey: ['bike-history', selectedBike],
-    queryFn: () => selectedBike ? apiClient.getBikeHistory(selectedBike) : Promise.resolve([]),
+  const currentPage = selectedBike ? (historyPages[selectedBike] || 1) : 1
+
+  const { data: bikeHistoryResponse, isLoading: historyLoading, error: historyError } = useQuery({
+    queryKey: ['bike-history', selectedBike, currentPage],
+    queryFn: () => selectedBike ? apiClient.getBikeHistory(selectedBike, currentPage) : Promise.resolve({ data: [], meta: { total: 0, has_next: false, page: 1, pages: 0 } }),
     enabled: !!selectedBike,
   })
+
+  // Handle accumulating history data
+  const bikeHistory = selectedBike ? (accumulatedHistory[selectedBike] || []) : []
+  const historyMeta = bikeHistoryResponse?.meta
+
+  // Effect to accumulate history when new data is loaded
+  React.useEffect(() => {
+    if (selectedBike && bikeHistoryResponse?.data) {
+      setAccumulatedHistory(prev => {
+        const currentHistory = prev[selectedBike] || []
+        const newData = bikeHistoryResponse.data
+        
+        // If this is page 1, replace the history, otherwise append
+        const isFirstPage = currentPage === 1
+        const updatedHistory = isFirstPage ? newData : [...currentHistory, ...newData]
+        
+        return {
+          ...prev,
+          [selectedBike]: updatedHistory
+        }
+      })
+    }
+  }, [selectedBike, bikeHistoryResponse, currentPage])
+
+  // Reset history when changing bikes
+  const handleBikeSelection = (bikeNumber: string) => {
+    const newSelectedBike = selectedBike === bikeNumber ? null : bikeNumber
+    setSelectedBike(newSelectedBike)
+    
+    if (newSelectedBike && !accumulatedHistory[newSelectedBike]) {
+      // Reset page to 1 for new bike selection
+      setHistoryPages(prev => ({
+        ...prev,
+        [newSelectedBike]: 1
+      }))
+    }
+  }
 
   return (
     <div className="px-4 py-6 sm:px-0">
@@ -56,65 +99,23 @@ export default function BikesPage() {
                 <BikeCard 
                   bike={bike}
                   showViewHistoryButton={true}
-                  onViewHistory={() => setSelectedBike(selectedBike === bike.bike_number ? null : bike.bike_number)}
+                  onViewHistory={() => handleBikeSelection(bike.bike_number)}
                   isHistoryExpanded={selectedBike === bike.bike_number}
+                  showInlineHistory={true}
+                  historyData={selectedBike === bike.bike_number ? bikeHistory : []}
+                  historyLoading={selectedBike === bike.bike_number ? historyLoading : false}
+                  historyError={selectedBike === bike.bike_number ? historyError : null}
+                  historyMeta={selectedBike === bike.bike_number ? historyMeta : undefined}
+                  onLoadMore={() => {
+                    if (selectedBike) {
+                      setHistoryPages(prev => ({
+                        ...prev,
+                        [selectedBike]: (prev[selectedBike] || 1) + 1
+                      }))
+                    }
+                  }}
+                  onStationClick={(stationUid) => navigate(`/stations/${stationUid}`)}
                 />
-                
-                {/* Bike History Section */}
-                {selectedBike === bike.bike_number && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <h4 className="text-sm font-medium text-gray-900 mb-3">Recent Trip History</h4>
-                    
-                    {historyLoading ? (
-                      <div className="flex items-center justify-center py-4">
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600"></div>
-                        <span className="ml-2 text-sm text-gray-500">Loading history...</span>
-                      </div>
-                    ) : bikeHistory && bikeHistory.length > 0 ? (
-                      <div className="space-y-3 max-h-64 overflow-y-auto">
-                        {bikeHistory.slice(0, 10).map((trip, index) => (
-                          <div key={index} className="bg-gray-50 rounded-lg p-3">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm text-gray-900">
-                                  <span className="font-medium">{trip.start_station.name}</span>
-                                  <span className="mx-2 text-gray-400">→</span>
-                                  <span className="font-medium">{trip.end_station.name}</span>
-                                </div>
-                                <div className="mt-1 text-xs text-gray-500">
-                                  Distance: {trip.distance_km.toFixed(2)} km
-                                </div>
-                              </div>
-                              <div className="text-right text-xs text-gray-500 ml-4">
-                                <div className="font-medium text-gray-700">
-                                  {formatRelativeTime(trip.end_time)}
-                                </div>
-                                <div className="mt-1">
-                                  {formatLocalDateTime(trip.start_time, {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    hour12: true
-                                  })}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                        {bikeHistory.length > 10 && (
-                          <div className="text-center text-xs text-gray-500 py-2">
-                            Showing 10 most recent trips out of {bikeHistory.length} total
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-center py-4 text-sm text-gray-500">
-                        No trip history available
-                      </div>
-                    )}
-                  </div>
-                )}
               </li>
             ))}
           </ul>

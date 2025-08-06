@@ -130,10 +130,14 @@ class ApiClient {
     return allBikes
   }
 
-  async getBikeHistory(bikeNumber: string): Promise<BikeMovement[]> {
-    const response = await this.client.get(`/bikes/${bikeNumber}/history`);
+  async getBikeHistory(
+    bikeNumber: string, 
+    page: number = 1, 
+    limit: number = 25
+  ): Promise<{ data: BikeMovement[], meta: { total: number, has_next: boolean, page: number, pages: number } }> {
+    const response = await this.client.get(`/bikes/${bikeNumber}/history?skip=${(page - 1) * limit}&limit=${limit}`);
     const parsed = BikeMovementsResponseSchema.parse(response.data);
-    return parsed.data;
+    return { data: parsed.data, meta: parsed.meta };
   }
 
   // Current bike distribution (using stations data)

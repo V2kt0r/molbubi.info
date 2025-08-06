@@ -1,11 +1,19 @@
-import { useParams, Link } from 'react-router-dom'
+import React, { useState } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '../services/api'
 import BikeCard from '../components/BikeCard'
+import { BikeMovement } from '../types/api'
 
 export default function StationDetailPage() {
   const { stationId } = useParams<{ stationId: string }>()
+  const navigate = useNavigate()
   const stationIdNum = stationId ? parseInt(stationId) : null
+  
+  // History state for bikes at this station
+  const [selectedBike, setSelectedBike] = useState<string | null>(null)
+  const [historyPages, setHistoryPages] = useState<{ [bikeNumber: string]: number }>({})
+  const [accumulatedHistory, setAccumulatedHistory] = useState<{ [bikeNumber: string]: BikeMovement[] }>({})
 
   // Get station details
   const { data: station, isLoading: stationLoading, error: stationError } = useQuery({
@@ -31,6 +39,51 @@ export default function StationDetailPage() {
   const stationBikes = allBikes?.filter(bike => 
     bikeNumbers?.includes(bike.bike_number)
   ) || []
+
+  // History management for bikes at this station
+  const currentPage = selectedBike ? (historyPages[selectedBike] || 1) : 1
+
+  const { data: bikeHistoryResponse, isLoading: historyLoading, error: historyError } = useQuery({
+    queryKey: ['bike-history', selectedBike, currentPage],
+    queryFn: () => selectedBike ? apiClient.getBikeHistory(selectedBike, currentPage) : Promise.resolve({ data: [], meta: { total: 0, has_next: false, page: 1, pages: 0 } }),
+    enabled: !!selectedBike,
+  })
+
+  const bikeHistory = selectedBike ? (accumulatedHistory[selectedBike] || []) : []
+  const historyMeta = bikeHistoryResponse?.meta
+
+  // Effect to accumulate history when new data is loaded
+  React.useEffect(() => {
+    if (selectedBike && bikeHistoryResponse?.data) {
+      setAccumulatedHistory(prev => {
+        const currentHistory = prev[selectedBike] || []
+        const newData = bikeHistoryResponse.data
+        
+        // If this is page 1, replace the history, otherwise append
+        const isFirstPage = currentPage === 1
+        const updatedHistory = isFirstPage ? newData : [...currentHistory, ...newData]
+        
+        return {
+          ...prev,
+          [selectedBike]: updatedHistory
+        }
+      })
+    }
+  }, [selectedBike, bikeHistoryResponse, currentPage])
+
+  // Reset history when changing bikes
+  const handleBikeSelection = (bikeNumber: string) => {
+    const newSelectedBike = selectedBike === bikeNumber ? null : bikeNumber
+    setSelectedBike(newSelectedBike)
+    
+    if (newSelectedBike && !accumulatedHistory[newSelectedBike]) {
+      // Reset page to 1 for new bike selection
+      setHistoryPages(prev => ({
+        ...prev,
+        [newSelectedBike]: 1
+      }))
+    }
+  }
 
   const isLoading = stationLoading || bikesLoading || allBikesLoading
   const error = stationError || bikesError
@@ -119,7 +172,26 @@ export default function StationDetailPage() {
             <ul className="divide-y divide-gray-200">
               {stationBikes.map((bike) => (
                 <li key={bike.bike_number}>
-                  <BikeCard bike={bike} />
+                  <BikeCard 
+                    bike={bike} 
+                    showViewHistoryButton={true}
+                    onViewHistory={() => handleBikeSelection(bike.bike_number)}
+                    isHistoryExpanded={selectedBike === bike.bike_number}
+                    showInlineHistory={true}
+                    historyData={selectedBike === bike.bike_number ? bikeHistory : []}
+                    historyLoading={selectedBike === bike.bike_number ? historyLoading : false}
+                    historyError={selectedBike === bike.bike_number ? historyError : null}
+                    historyMeta={selectedBike === bike.bike_number ? historyMeta : undefined}
+                    onLoadMore={() => {
+                      if (selectedBike) {
+                        setHistoryPages(prev => ({
+                          ...prev,
+                          [selectedBike]: (prev[selectedBike] || 1) + 1
+                        }))
+                      }
+                    }}
+                    onStationClick={(stationUid) => navigate(`/stations/${stationUid}`)}
+                  />
                 </li>
               ))}
             </ul>
