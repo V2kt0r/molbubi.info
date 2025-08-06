@@ -1,11 +1,18 @@
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../services/api'
 
 export default function StationsPage() {
+  const navigate = useNavigate()
+  
   const { data: stations, isLoading, error } = useQuery({
     queryKey: ['stations', 'all'],
     queryFn: () => apiClient.getAllStations(),
   })
+
+  const handleStationClick = (stationUid: number) => {
+    navigate(`/stations/${stationUid}`)
+  }
 
   if (isLoading) {
     return (
@@ -45,7 +52,10 @@ export default function StationsPage() {
         <ul className="divide-y divide-gray-200">
           {stations?.map((station) => (
             <li key={station.uid}>
-              <div className="px-4 py-4 sm:px-6">
+              <div 
+                className="px-4 py-4 sm:px-6 hover:bg-gray-50 cursor-pointer transition-colors duration-150"
+                onClick={() => handleStationClick(station.uid)}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">
@@ -67,6 +77,9 @@ export default function StationsPage() {
                         {station.bike_count} bikes available
                       </p>
                     )}
+                    <p className="text-xs text-gray-400 mt-1">
+                      Click to view bikes →
+                    </p>
                   </div>
                 </div>
               </div>
