@@ -208,3 +208,103 @@ export function convertDistributionToLocalTime<T extends { time: number }>(utcDi
 export function getTimezoneOffsetHours(): number {
   return -new Date().getTimezoneOffset() / 60;
 }
+
+/**
+ * Formats a Date object to YYYY-MM-DD string for API usage
+ * @param date - Date object to format
+ * @returns Formatted date string (e.g., "2024-01-15")
+ */
+export function formatDateForApi(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Gets date N days ago from today
+ * @param days - Number of days ago
+ * @returns Date object
+ */
+export function getDaysAgo(days: number): Date {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date;
+}
+
+/**
+ * Gets today's date
+ * @returns Today's Date object
+ */
+export function getToday(): Date {
+  return new Date();
+}
+
+/**
+ * Parses YYYY-MM-DD string to Date object
+ * @param dateString - Date string in YYYY-MM-DD format
+ * @returns Date object or null if invalid
+ */
+export function parseDateFromApi(dateString: string): Date | null {
+  try {
+    const date = new Date(dateString + 'T00:00:00');
+    return isNaN(date.getTime()) ? null : date;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Validates if a date string is in YYYY-MM-DD format
+ * @param dateString - Date string to validate
+ * @returns true if valid format
+ */
+export function isValidDateString(dateString: string): boolean {
+  const regex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!regex.test(dateString)) return false;
+  
+  const date = parseDateFromApi(dateString);
+  return date !== null;
+}
+
+/**
+ * Gets preset date ranges for filtering
+ * @returns Object with preset date ranges formatted for API
+ */
+export function getDatePresets() {
+  const today = getToday();
+  const yesterday = getDaysAgo(1);
+  
+  return {
+    today: {
+      startDate: formatDateForApi(today),
+      endDate: formatDateForApi(today),
+      label: 'Today'
+    },
+    lastDay: {
+      startDate: formatDateForApi(yesterday),
+      endDate: formatDateForApi(yesterday),
+      label: 'Yesterday'
+    },
+    last7Days: {
+      startDate: formatDateForApi(getDaysAgo(7)),
+      endDate: formatDateForApi(today),
+      label: 'Last 7 Days'
+    },
+    last30Days: {
+      startDate: formatDateForApi(getDaysAgo(30)),
+      endDate: formatDateForApi(today),
+      label: 'Last 30 Days'
+    },
+    last90Days: {
+      startDate: formatDateForApi(getDaysAgo(90)),
+      endDate: formatDateForApi(today),
+      label: 'Last 90 Days'
+    },
+    allTime: {
+      startDate: undefined,
+      endDate: undefined,
+      label: 'All Time'
+    }
+  };
+}

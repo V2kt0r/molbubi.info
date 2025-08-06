@@ -2,10 +2,18 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '../services/api'
 import { convertDistributionToLocalTime, formatHour, getUserTimezone } from '../lib/date'
+import DateRangeFilter from '../components/DateRangeFilter'
 
 export default function DistributionPage() {
   const [selectedStations, setSelectedStations] = useState<number[]>([])
   const [searchTerm, setSearchTerm] = useState('')
+  const [startDate, setStartDate] = useState<string | undefined>(undefined)
+  const [endDate, setEndDate] = useState<string | undefined>(undefined)
+
+  const handleDateRangeChange = (newStartDate?: string, newEndDate?: string) => {
+    setStartDate(newStartDate)
+    setEndDate(newEndDate)
+  }
 
   // Get all stations for the selector
   const { data: allStations, isLoading: stationsLoading } = useQuery({
@@ -14,10 +22,10 @@ export default function DistributionPage() {
   })
 
   const { data: arrivalsRaw, isLoading: arrivalsLoading, error: arrivalsError } = useQuery({
-    queryKey: ['distribution', 'arrivals', selectedStations],
+    queryKey: ['distribution', 'arrivals', selectedStations, startDate, endDate],
     queryFn: () => apiClient.getHourlyArrivalDistribution(
-      undefined, // startDate
-      undefined, // endDate  
+      startDate,
+      endDate,
       selectedStations.length > 0 ? selectedStations : undefined
     ),
   })
@@ -26,10 +34,10 @@ export default function DistributionPage() {
   const arrivals = arrivalsRaw ? convertDistributionToLocalTime(arrivalsRaw) : undefined
 
   const { data: departuresRaw, isLoading: departuresLoading, error: departuresError } = useQuery({
-    queryKey: ['distribution', 'departures', selectedStations],
+    queryKey: ['distribution', 'departures', selectedStations, startDate, endDate],
     queryFn: () => apiClient.getHourlyDepartureDistribution(
-      undefined, // startDate
-      undefined, // endDate
+      startDate,
+      endDate,
       selectedStations.length > 0 ? selectedStations : undefined
     ),
   })
@@ -124,6 +132,16 @@ export default function DistributionPage() {
         </p>
       </div>
 
+      {/* Date Range Filter */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Time Period</h3>
+        <DateRangeFilter
+          startDate={startDate}
+          endDate={endDate}
+          onDateRangeChange={handleDateRangeChange}
+        />
+      </div>
+
       {/* Station Selector */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Select Stations to Compare</h3>
@@ -136,7 +154,7 @@ export default function DistributionPage() {
               placeholder="Search stations by name or ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
           <div className="flex gap-2">
