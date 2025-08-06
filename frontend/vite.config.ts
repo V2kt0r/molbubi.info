@@ -12,47 +12,21 @@ export default defineConfig({
   },
   server: {
     host: true,
-    port: 3000,
+    port: 3080,
     proxy: {
-      '/api/v1/stations': {
-        target: 'http://localhost:8080',
+      // Proxy API calls to avoid CORS issues when connecting to external APIs
+      '/api/v1': {
+        target: process.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:8080',
         changeOrigin: true,
-      },
-      '/api/v1/bikes': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-      },
-      '/api/v1/distribution': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
+        secure: true,
+        configure: (proxy, options) => {
+          console.log('🔄 Vite Proxy configured - Target:', options.target);
+        },
       },
     },
   },
   preview: {
     host: true,
     port: 3000,
-    proxy: {
-      '/api/v1/stations': {
-        target: 'http://api:8000',
-        changeOrigin: true,
-      },
-      '/api/v1/bikes': {
-        target: 'http://api:8000',
-        changeOrigin: true,
-      },
-      '/api/v1/distribution': {
-        target: 'http://api:8000',
-        changeOrigin: true,
-      },
-      '/api/v1/health': {
-        target: 'http://api:8000',
-        changeOrigin: true,
-      },
-    },
-  },
-  define: {
-    // Make env variables available at build time
-    __API_BASE_URL__: JSON.stringify(process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080/api/v1'),
-    __ENVIRONMENT__: JSON.stringify(process.env.REACT_APP_ENVIRONMENT || 'development'),
   },
 })

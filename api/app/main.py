@@ -1,6 +1,7 @@
 import time
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1.api import api_router
@@ -8,6 +9,15 @@ from app.core.config import settings
 from app.shared.exceptions import ResourceNotFound
 
 app = FastAPI(title="molbubi.info", openapi_url="/api/v1/openapi.json", version=settings.VERSION)
+
+# Add CORS middleware to allow frontend requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.middleware("http")

@@ -26,7 +26,7 @@ export default function Layout({ children }: LayoutProps) {
               {/* Logo */}
               <div className="flex-shrink-0 flex items-center">
                 <Link to="/" className="text-2xl font-bold text-primary-600">
-                  Molbubi
+                  molbubi.info
                 </Link>
               </div>
               

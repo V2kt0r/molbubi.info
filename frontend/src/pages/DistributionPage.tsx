@@ -67,8 +67,8 @@ export default function DistributionPage() {
     )
   }
 
-  const totalArrivals = arrivals?.reduce((sum, hour) => sum + (hour.arrival_count || 0), 0) || 0
-  const totalDepartures = departures?.reduce((sum, hour) => sum + (hour.departure_count || 0), 0) || 0
+  const totalArrivals = arrivals?.reduce((sum: number, hour) => sum + (hour.arrival_count || 0), 0) || 0
+  const totalDepartures = departures?.reduce((sum: number, hour) => sum + (hour.departure_count || 0), 0) || 0
   const peakArrivalHour = arrivals?.reduce((max, hour) => 
     (hour.arrival_count || 0) > (max.arrival_count || 0) ? hour : max, 
     arrivals[0]
@@ -285,7 +285,7 @@ export default function DistributionPage() {
             </h3>
             <div className="space-y-2">
               {arrivals.map((hour) => {
-                const maxCount = Math.max(...arrivals.map(h => h.arrival_count || 0))
+                const maxCount = Math.max(...arrivals.map((h) => h.arrival_count || 0))
                 const percentage = maxCount > 0 ? ((hour.arrival_count || 0) / maxCount) * 100 : 0
                 
                 return (
@@ -325,7 +325,7 @@ export default function DistributionPage() {
             </h3>
             <div className="space-y-2">
               {departures.map((hour) => {
-                const maxCount = Math.max(...departures.map(h => h.departure_count || 0))
+                const maxCount = Math.max(...departures.map((h) => h.departure_count || 0))
                 const percentage = maxCount > 0 ? ((hour.departure_count || 0) / maxCount) * 100 : 0
                 
                 return (

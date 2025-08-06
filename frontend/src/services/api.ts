@@ -79,7 +79,7 @@ class ApiClient {
     let allStations: StationBikeCount[] = [];
     let page = 1;
     let hasMore = true;
-    const limit = 100;
+    const limit = 300;
 
     while (hasMore) {
       const response = await this.client.get(`/stations/?skip=${(page - 1) * limit}&limit=${limit}`);
@@ -109,6 +109,25 @@ class ApiClient {
     const response = await this.client.get('/bikes/');
     const parsed = BikesResponseSchema.parse(response.data);
     return parsed.data;
+  }
+
+  async getAllBikes(): Promise<BikeWithStats[]> {
+    let allBikes: BikeWithStats[] = []
+    let page = 1
+    let hasMore = true
+    const limit = 2000
+
+    while (hasMore) {
+      const response = await this.client.get(`/bikes/?skip=${(page - 1) * limit}&limit=${limit}`);
+      const parsed = BikesResponseSchema.parse(response.data);
+
+      allBikes.push(...parsed.data)
+
+      hasMore = parsed.meta.has_next;
+      page++;
+    }
+
+    return allBikes
   }
 
   async getBikeHistory(bikeNumber: string): Promise<BikeMovement[]> {

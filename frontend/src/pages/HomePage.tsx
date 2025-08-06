@@ -9,7 +9,7 @@ export default function HomePage() {
 
   const { data: bikes, isLoading: bikesLoading } = useQuery({
     queryKey: ['bikes'],
-    queryFn: () => apiClient.getBikes(),
+    queryFn: () => apiClient.getAllBikes(),
   })
 
   if (stationsLoading || bikesLoading) {
@@ -38,7 +38,7 @@ export default function HomePage() {
       <div className="border-4 border-dashed border-gray-200 rounded-lg p-8">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Welcome to Molbubi
+            Welcome to molbubi.info
           </h1>
           <p className="text-xl text-gray-600 mb-8">
             Real-time bike sharing system monitoring for Budapest
