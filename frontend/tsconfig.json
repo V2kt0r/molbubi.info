@@ -23,11 +23,16 @@
     /* Path mapping */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@/lib/*": ["./src/lib/*"],
+      "@/services/*": ["./src/services/*"],
+      "@/types/*": ["./src/types/*"]
     }
   },
   "include": [
-    "src"
+    "src/**/*",
+    "src/**/*.ts",
+    "src/**/*.tsx"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
