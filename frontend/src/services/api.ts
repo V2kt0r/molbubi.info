@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
-import { ENV } from '@/lib/env';
+import { ENV } from '../lib/env';
 import {
   StationBikeCount,
   BikeWithStats,
@@ -12,7 +12,7 @@ import {
   HourlyDistributionResponseSchema,
   ApiErrorSchema,
   ApiError,
-} from '@/types/api';
+} from '../types/api';
 
 class ApiClient {
   private client: AxiosInstance;

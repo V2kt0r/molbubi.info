@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { apiClient } from '@/services/api'
-import { formatLocalDateTime, formatRelativeTime } from '@/lib/date'
+import { apiClient } from '../services/api'
+import { formatLocalDateTime, formatRelativeTime } from '../lib/date'
 
 export default function BikesPage() {
   const [selectedBike, setSelectedBike] = useState<string | null>(null)

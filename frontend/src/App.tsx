@@ -1,9 +1,9 @@
 import { Routes, Route } from 'react-router-dom'
-import Layout from '@/components/Layout'
-import HomePage from '@/pages/HomePage'
-import StationsPage from '@/pages/StationsPage'
-import BikesPage from '@/pages/BikesPage'
-import DistributionPage from '@/pages/DistributionPage'
+import Layout from './components/Layout'
+import HomePage from './pages/HomePage'
+import StationsPage from './pages/StationsPage'
+import BikesPage from './pages/BikesPage'
+import DistributionPage from './pages/DistributionPage'
 
 function App() {
   return (

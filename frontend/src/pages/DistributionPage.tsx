@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { apiClient } from '@/services/api'
-import { convertDistributionToLocalTime, formatHour, getUserTimezone } from '@/lib/date'
+import { apiClient } from '../services/api'
+import { convertDistributionToLocalTime, formatHour, getUserTimezone } from '../lib/date'
 
 export default function DistributionPage() {
   const [selectedStations, setSelectedStations] = useState<number[]>([])
@@ -67,13 +67,13 @@ export default function DistributionPage() {
     )
   }
 
-  const totalArrivals = arrivals?.reduce((sum: number, hour) => sum + (hour.arrival_count || 0), 0) || 0
-  const totalDepartures = departures?.reduce((sum: number, hour) => sum + (hour.departure_count || 0), 0) || 0
-  const peakArrivalHour = arrivals?.reduce((max, hour) => 
+  const totalArrivals = arrivals?.reduce((sum: number, hour: any) => sum + (hour.arrival_count || 0), 0) || 0
+  const totalDepartures = departures?.reduce((sum: number, hour: any) => sum + (hour.departure_count || 0), 0) || 0
+  const peakArrivalHour = arrivals?.reduce((max: any, hour: any) => 
     (hour.arrival_count || 0) > (max.arrival_count || 0) ? hour : max, 
     arrivals[0]
   )
-  const peakDepartureHour = departures?.reduce((max, hour) => 
+  const peakDepartureHour = departures?.reduce((max: any, hour: any) => 
     (hour.departure_count || 0) > (max.departure_count || 0) ? hour : max, 
     departures[0]
   )
