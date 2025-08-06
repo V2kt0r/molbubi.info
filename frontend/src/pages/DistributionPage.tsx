@@ -284,8 +284,8 @@ export default function DistributionPage() {
               )}
             </h3>
             <div className="space-y-2">
-              {arrivals.map((hour) => {
-                const maxCount = Math.max(...arrivals.map((h) => h.arrival_count || 0))
+              {arrivals.map((hour: any) => {
+                const maxCount = Math.max(...arrivals.map((h: any) => h.arrival_count || 0))
                 const percentage = maxCount > 0 ? ((hour.arrival_count || 0) / maxCount) * 100 : 0
                 
                 return (
@@ -324,8 +324,8 @@ export default function DistributionPage() {
               )}
             </h3>
             <div className="space-y-2">
-              {departures.map((hour) => {
-                const maxCount = Math.max(...departures.map((h) => h.departure_count || 0))
+              {departures.map((hour: any) => {
+                const maxCount = Math.max(...departures.map((h: any) => h.departure_count || 0))
                 const percentage = maxCount > 0 ? ((hour.departure_count || 0) / maxCount) * 100 : 0
                 
                 return (
