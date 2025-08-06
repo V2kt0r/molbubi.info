@@ -1,5 +1,6 @@
 import { BikeWithStats, BikeMovement } from '../types/api'
 import { formatLocalDateTime, formatRelativeTime } from '../lib/date'
+import { highlightText } from '../lib/highlight'
 
 interface BikeCardProps {
   bike: BikeWithStats
@@ -19,6 +20,7 @@ interface BikeCardProps {
   }
   onLoadMore?: () => void
   onStationClick?: (stationUid: number) => void
+  searchQuery?: string
 }
 
 export default function BikeCard({ 
@@ -32,7 +34,8 @@ export default function BikeCard({
   historyError = null,
   historyMeta,
   onLoadMore,
-  onStationClick
+  onStationClick,
+  searchQuery = ""
 }: BikeCardProps) {
   return (
     <div className="px-4 py-4 sm:px-6">
@@ -40,7 +43,7 @@ export default function BikeCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-gray-900">
-              Bike #{bike.bike_number}
+              Bike #{highlightText(bike.bike_number, searchQuery)}
             </p>
             {showViewHistoryButton && onViewHistory && (
               <button
@@ -53,13 +56,13 @@ export default function BikeCard({
           </div>
           <div className="flex space-x-4 text-sm text-gray-500">
             <span>
-              Location: {bike.current_location.name}
+              Location: {highlightText(bike.current_location.name, searchQuery)}
             </span>
             <span>
-              {bike.total_trips} trips
+              {highlightText(bike.total_trips.toString(), searchQuery)} trips
             </span>
             <span>
-              {bike.total_distance_km.toFixed(1)} km total
+              {highlightText(bike.total_distance_km.toFixed(1), searchQuery)} km total
             </span>
           </div>
         </div>

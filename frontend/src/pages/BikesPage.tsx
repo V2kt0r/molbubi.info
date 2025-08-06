@@ -1,20 +1,22 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../services/api'
 import BikeCard from '../components/BikeCard'
+import SearchInput from '../components/SearchInput'
 import { BikeMovement } from '../types/api'
 
 export default function BikesPage() {
   const [selectedBike, setSelectedBike] = useState<string | null>(null)
   const [historyPages, setHistoryPages] = useState<{ [bikeNumber: string]: number }>({})
   const [accumulatedHistory, setAccumulatedHistory] = useState<{ [bikeNumber: string]: BikeMovement[] }>({})
+  const [searchQuery, setSearchQuery] = useState("")
   const navigate = useNavigate()
 
 
   const { data: bikes, isLoading, error } = useQuery({
-    queryKey: ['bikes'],
-    queryFn: () => apiClient.getBikes(),
+    queryKey: ['bikes', 'all'],
+    queryFn: () => apiClient.getAllBikes(),
   })
 
   const currentPage = selectedBike ? (historyPages[selectedBike] || 1) : 1
@@ -62,13 +64,44 @@ export default function BikesPage() {
     }
   }
 
+  // Filter bikes based on search query
+  const filteredBikes = useMemo(() => {
+    if (!bikes || !searchQuery.trim()) return bikes
+
+    const query = searchQuery.toLowerCase().trim()
+    return bikes.filter(bike => 
+      bike.bike_number.toLowerCase().includes(query) ||
+      bike.current_location.name.toLowerCase().includes(query) ||
+      bike.total_trips.toString().includes(query) ||
+      bike.total_distance_km.toString().includes(query)
+    )
+  }, [bikes, searchQuery])
+
   return (
     <div className="px-4 py-6 sm:px-0">
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Bikes</h1>
-        <p className="text-gray-600">
+        <p className="text-gray-600 mb-4">
           Monitor individual bikes and their status
         </p>
+        
+        {/* Search Input */}
+        <div className="max-w-md">
+          <SearchInput
+            placeholder="Search bikes by number, location, trips, or distance..."
+            onSearch={setSearchQuery}
+            className="w-full"
+          />
+        </div>
+        
+        {/* Results Count */}
+        {searchQuery && filteredBikes && (
+          <div className="mt-3 text-sm text-gray-500">
+            {filteredBikes.length === 0 
+              ? "No bikes found" 
+              : `${filteredBikes.length} of ${bikes?.length || 0} bikes`}
+          </div>
+        )}
       </div>
 
 
@@ -91,10 +124,10 @@ export default function BikesPage() {
       )}
 
       {/* Bikes List */}
-      {bikes && bikes.length > 0 && (
+      {filteredBikes && filteredBikes.length > 0 ? (
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
           <ul className="divide-y divide-gray-200">
-            {bikes.map((bike) => (
+            {filteredBikes.map((bike) => (
               <li key={bike.bike_number}>
                 <BikeCard 
                   bike={bike}
@@ -115,19 +148,29 @@ export default function BikesPage() {
                     }
                   }}
                   onStationClick={(stationUid) => navigate(`/stations/${stationUid}`)}
+                  searchQuery={searchQuery}
                 />
               </li>
             ))}
           </ul>
         </div>
-      )}
-
-      {/* Empty State */}
-      {bikes && bikes.length === 0 && (
+      ) : bikes && bikes.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-gray-500">No bikes found.</div>
         </div>
-      )}
+      ) : searchQuery ? (
+        <div className="text-center py-12">
+          <div className="text-gray-500">
+            No bikes match your search "{searchQuery}".
+            <button 
+              onClick={() => setSearchQuery("")}
+              className="ml-2 text-primary-600 hover:text-primary-700 underline"
+            >
+              Clear search
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
